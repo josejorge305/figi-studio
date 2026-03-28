@@ -2,6 +2,7 @@ import EditorPanel from './EditorPanel';
 import AnatomyPanel from './AnatomyPanel';
 import TerminalPanel from './TerminalPanel';
 import LearnPanel from './LearnPanel';
+import type { TerminalLine } from '../../hooks/useTerminal';
 
 type BottomTab = 'editor' | 'anatomy' | 'terminal' | 'learn';
 
@@ -28,6 +29,8 @@ interface BottomPanelProps {
   onFileSelect: (path: string) => void;
   onFileClose: (path: string) => void;
   onFileUpdated: (path: string, content: string) => void;
+  terminalLines: TerminalLine[];
+  terminalClear: () => void;
 }
 
 const TABS: { key: BottomTab; icon: string; label: string }[] = [
@@ -39,7 +42,9 @@ const TABS: { key: BottomTab; icon: string; label: string }[] = [
 
 export default function BottomPanel({
   activeTab, onTabChange, collapsed, onToggleCollapse, height, onResizeStart,
-  openFiles, selectedFile, files, fileContents, projectId, onFileSelect, onFileClose, onFileUpdated,
+  openFiles, selectedFile, files, fileContents, projectId,
+  onFileSelect, onFileClose, onFileUpdated,
+  terminalLines, terminalClear,
 }: BottomPanelProps) {
   const tabBarHeight = 36;
 
@@ -98,8 +103,19 @@ export default function BottomPanel({
               onFileUpdated={onFileUpdated}
             />
           )}
-          {activeTab === 'anatomy' && <AnatomyPanel files={files} />}
-          {activeTab === 'terminal' && <TerminalPanel />}
+          {activeTab === 'anatomy' && (
+            <AnatomyPanel
+              files={files}
+              fileContents={fileContents}
+              onFileSelected={onFileSelect}
+            />
+          )}
+          {activeTab === 'terminal' && (
+            <TerminalPanel
+              lines={terminalLines}
+              onClear={terminalClear}
+            />
+          )}
           {activeTab === 'learn' && <LearnPanel files={files} />}
         </div>
       )}

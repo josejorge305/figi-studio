@@ -54,3 +54,28 @@ body {
 .animate-fade-in { animation: fadeIn 0.3s ease; }
 .animate-pulse { animation: pulse 1.5s ease infinite; }
 .animate-spin { animation: spin 1s linear infinite; }
+
+@keyframes blink { 50% { opacity: 0; } }
+
+/* React Flow dark theme overrides */
+.react-flow__node {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.react-flow__controls-button {
+  background: #1a1d27 !important;
+  border-color: #2a2d37 !important;
+  fill: #9ca3af !important;
+}
+
+.react-flow__controls-button:hover {
+  background: #252830 !important;
+}
+
+.react-flow__edge-textbg {
+  fill: #0f1117 !important;
+}
+
+.react-flow__minimap {
+  background: #1a1d27 !important;
+}

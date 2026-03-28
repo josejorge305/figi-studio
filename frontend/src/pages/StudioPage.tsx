@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
+import { useTerminal } from '../hooks/useTerminal';
 import StudioLayout from '../components/panels/StudioLayout';
 
 interface Message { id: number; role: 'user' | 'assistant'; content: string; created_at: string; changedFiles?: string[]; }
@@ -26,6 +27,8 @@ export default function StudioPage() {
   const [recentlyChanged, setRecentlyChanged] = useState<Set<string>>(new Set());
   const initialPromptSent = useRef(false);
 
+  const { lines: terminalLines, log: terminalLog, clear: terminalClear } = useTerminal();
+
   // Load project data
   useEffect(() => {
     if (!projectId) return;
@@ -34,7 +37,9 @@ export default function StudioPage() {
         setProject(res.data.project);
         setMessages(res.data.messages);
         setFiles(res.data.files);
+        terminalLog('system', `Loaded project: ${res.data.project.name}`);
         if (res.data.files.length > 0) {
+          terminalLog('info', `${res.data.files.length} files found`);
           api.get<{ files: FileData[] }>(`/api/projects/${projectId}/files`).then(filesRes => {
             if (filesRes.success && filesRes.data) {
               const indexFile = filesRes.data.files.find(f => f.path === 'index.html');
@@ -71,7 +76,6 @@ export default function StudioPage() {
         if (f.content) contents[f.path] = f.content;
       }
       setFileContents(contents);
-      // Rebuild preview from latest index.html
       const indexFile = res.data.files.find(f => f.path === 'index.html');
       if (indexFile?.content) {
         setPreviewHtml(indexFile.content);
@@ -83,17 +87,27 @@ export default function StudioPage() {
   // Called when a file is saved in the editor
   const handleFileUpdated = useCallback((path: string, content: string) => {
     setFileContents(prev => ({ ...prev, [path]: content }));
-    // If the saved file is index.html, refresh preview
+    terminalLog('success', `💾 Saved: ${path}`);
     if (path === 'index.html') {
       setPreviewHtml(content);
       setPreviewKey(k => k + 1);
+      terminalLog('info', 'Preview refreshed.');
     } else {
-      // For non-index files, rebuild preview by re-fetching to get any CSS/JS changes
-      // reflected through the server-rendered preview
       setPreviewKey(k => k + 1);
+      terminalLog('info', 'Preview refreshed.');
     }
     showToast(`Saved ${path.split('/').pop()}`);
-  }, []);
+  }, [terminalLog]);
+
+  // Called when files are created/deleted/renamed via explorer
+  const handleFilesChanged = useCallback(async () => {
+    await refreshFiles();
+  }, [refreshFiles]);
+
+  // Terminal-aware log for file CRUD from explorer
+  const handleTerminalLog = useCallback((type: 'info' | 'success' | 'error' | 'warning' | 'system' | 'command' | 'ai', message: string) => {
+    terminalLog(type, message);
+  }, [terminalLog]);
 
   const handleSend = useCallback(async (overrideMessage?: string) => {
     const userMsg = (overrideMessage || input).trim();
@@ -101,6 +115,10 @@ export default function StudioPage() {
     if (!overrideMessage) setInput('');
     setGenerating(true);
     setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: userMsg, created_at: new Date().toISOString() }]);
+
+    const truncated = userMsg.length > 80 ? userMsg.slice(0, 80) + '...' : userMsg;
+    terminalLog('command', `> Generate: "${truncated}"`);
+    terminalLog('info', 'Sending prompt to Figi AI...');
 
     const res = await api.post<{ message: string; files: Array<{ path: string; language: string }>; preview_html: string | null }>(`/api/projects/${projectId}/generate`, { message: userMsg });
     if (res.success && res.data) {
@@ -110,6 +128,9 @@ export default function StudioPage() {
         id: Date.now() + 1, role: 'assistant', content: res.data!.message,
         created_at: new Date().toISOString(), changedFiles: changedPaths,
       }]);
+
+      terminalLog('success', `Generated ${changedPaths.length} file${changedPaths.length !== 1 ? 's' : ''}`);
+      changedPaths.forEach(p => terminalLog('info', `  📄 ${p}`));
 
       if (changedPaths.length > 0) {
         setFiles(prev => {
@@ -127,7 +148,6 @@ export default function StudioPage() {
         setRecentlyChanged(new Set(changedPaths));
         setTimeout(() => setRecentlyChanged(new Set()), 5000);
 
-        // Refresh file contents for editor
         api.get<{ files: FileData[] }>(`/api/projects/${projectId}/files`).then(filesRes => {
           if (filesRes.success && filesRes.data) {
             const contents: Record<string, string> = {};
@@ -143,13 +163,15 @@ export default function StudioPage() {
       if (res.data.preview_html) {
         setPreviewHtml(res.data.preview_html);
         setPreviewKey(k => k + 1);
+        terminalLog('success', 'Preview updated.');
         showToast(`${changedPaths.length} file${changedPaths.length !== 1 ? 's' : ''} generated — preview updated`);
       }
     } else {
       setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: `Sorry, something went wrong: ${res.error}`, created_at: new Date().toISOString() }]);
+      terminalLog('error', `Generation failed: ${res.error}`);
     }
     setGenerating(false);
-  }, [input, generating, projectId]);
+  }, [input, generating, projectId, terminalLog]);
 
   // Auto-send initial prompt from Dashboard
   useEffect(() => {
@@ -162,6 +184,17 @@ export default function StudioPage() {
       setTimeout(() => handleSend(designPrefix + state.initialPrompt), 100);
     }
   }, [loading, project, location.state, handleSend]);
+
+  // Listen for preview errors from iframe
+  useEffect(() => {
+    function handleMessage(event: MessageEvent) {
+      if (event.data?.type === 'preview-error') {
+        terminalLog('error', `Preview error: ${event.data.message}`);
+      }
+    }
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [terminalLog]);
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
@@ -185,6 +218,9 @@ export default function StudioPage() {
         recentlyChanged={recentlyChanged}
         userName={user?.name}
         projectId={projectId || ''}
+        terminalLines={terminalLines}
+        terminalLog={handleTerminalLog}
+        terminalClear={terminalClear}
         onInputChange={setInput}
         onSend={() => handleSend()}
         onSuggestionClick={setInput}
@@ -193,7 +229,7 @@ export default function StudioPage() {
         onBack={() => navigate('/dashboard')}
         onLogout={logout}
         onFileUpdated={handleFileUpdated}
-        onFilesChanged={refreshFiles}
+        onFilesChanged={handleFilesChanged}
       />
       {/* Toast */}
       {toast && (

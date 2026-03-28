@@ -4,6 +4,7 @@ import LeftSidebar from './LeftSidebar';
 import ChatPanel from './ChatPanel';
 import PreviewPanel from './PreviewPanel';
 import BottomPanel from './BottomPanel';
+import type { TerminalLine } from '../../hooks/useTerminal';
 
 type BottomTab = 'editor' | 'anatomy' | 'terminal' | 'learn';
 
@@ -43,6 +44,9 @@ interface StudioLayoutProps {
   recentlyChanged: Set<string>;
   userName?: string;
   projectId: string;
+  terminalLines: TerminalLine[];
+  terminalLog: (type: TerminalLine['type'], message: string) => void;
+  terminalClear: () => void;
   onInputChange: (value: string) => void;
   onSend: () => void;
   onSuggestionClick: (text: string) => void;
@@ -57,6 +61,7 @@ interface StudioLayoutProps {
 export default function StudioLayout({
   project, messages, files, fileContents, input, generating,
   previewHtml, previewKey, recentlyChanged, userName, projectId,
+  terminalLines, terminalLog, terminalClear,
   onInputChange, onSend, onSuggestionClick, onRefreshPreview, onOpenLive, onBack, onLogout,
   onFileUpdated, onFilesChanged,
 }: StudioLayoutProps) {
@@ -77,15 +82,12 @@ export default function StudioLayout({
 
   // Responsive
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [isTablet, setIsTablet] = useState(window.innerWidth >= 768 && window.innerWidth < 1024);
 
   useEffect(() => {
     const handleResize = () => {
       const w = window.innerWidth;
       setIsMobile(w < 768);
-      setIsTablet(w >= 768 && w < 1024);
-      if (w < 768) setSidebarCollapsed(true);
-      if (w >= 768 && w < 1024) setSidebarCollapsed(true);
+      if (w < 1024) setSidebarCollapsed(true);
     };
     window.addEventListener('resize', handleResize);
     handleResize();
@@ -248,6 +250,8 @@ export default function StudioLayout({
             onFileSelect={handleFileSelect}
             onFileClose={handleFileClose}
             onFileUpdated={onFileUpdated}
+            terminalLines={terminalLines}
+            terminalClear={terminalClear}
           />
         </div>
       </div>
