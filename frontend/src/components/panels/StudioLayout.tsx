@@ -201,6 +201,7 @@ export default function StudioLayout({
             )}
             <div className="flex-1" style={{ height: isMobile ? '50%' : '100%' }}>
               <PreviewPanel previewHtml={previewHtml} previewKey={previewKey} generating={generating}
+                files={files} fileContents={fileContents}
                 onRefresh={onRefreshPreview} onOpenLive={onOpenLive} />
             </div>
           </div>

@@ -6,7 +6,9 @@ import { useTerminal } from '../hooks/useTerminal';
 import StudioLayout from '../components/panels/StudioLayout';
 import ErrorBridge from '../components/panels/ErrorBridge';
 
-interface Message { id: number; role: 'user' | 'assistant'; content: string; created_at: string; changedFiles?: string[]; }
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8787';
+
+interface Message { id: number; role: 'user' | 'assistant'; content: string; created_at: string; changedFiles?: string[]; isStreaming?: boolean; }
 interface FileData { id: number; path: string; language: string; content?: string; updated_at: string; }
 interface Project { id: number; name: string; description: string; subdomain: string; status: string; }
 
@@ -28,16 +30,13 @@ export default function StudioPage() {
   const [recentlyChanged, setRecentlyChanged] = useState<Set<string>>(new Set());
   const initialPromptSent = useRef(false);
 
-  // Deploy state
   const [deployedUrl, setDeployedUrl] = useState<string | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [cfConnected, setCfConnected] = useState(false);
-
   const [previewError, setPreviewError] = useState<string | null>(null);
 
   const { lines: terminalLines, log: terminalLog, clear: terminalClear } = useTerminal();
 
-  // Load project data
   useEffect(() => {
     if (!projectId) return;
     api.get<{ project: Project; messages: Message[]; files: FileData[] }>(`/api/projects/${projectId}`).then(res => {
@@ -64,12 +63,9 @@ export default function StudioPage() {
       } else navigate('/dashboard');
     }).finally(() => setLoading(false));
 
-    // Check CF connection status
     api.get<{ connected: boolean }>('/api/cloudflare/status').then(res => {
       if (res.success && res.data) setCfConnected(res.data.connected);
     });
-
-    // Check for existing deployments
     api.get<{ deployments: Array<{ deployment_url: string; status: string }> }>(`/api/projects/${projectId}/deployments`).then(res => {
       if (res.success && res.data) {
         const latest = res.data.deployments.find(d => d.status === 'success');
@@ -108,116 +104,145 @@ export default function StudioPage() {
   const handleFileUpdated = useCallback((path: string, content: string) => {
     setFileContents(prev => ({ ...prev, [path]: content }));
     terminalLog('success', `💾 Saved: ${path}`);
-    if (path === 'index.html') {
-      setPreviewHtml(content);
-    }
+    if (path === 'index.html') setPreviewHtml(content);
     setPreviewKey(k => k + 1);
     terminalLog('info', 'Preview refreshed.');
     showToast(`Saved ${path.split('/').pop()}`);
   }, [terminalLog]);
 
-  const handleFilesChanged = useCallback(async () => {
-    await refreshFiles();
-  }, [refreshFiles]);
+  const handleFilesChanged = useCallback(async () => { await refreshFiles(); }, [refreshFiles]);
 
   const handleTerminalLog = useCallback((type: 'info' | 'success' | 'error' | 'warning' | 'system' | 'command' | 'ai', message: string) => {
     terminalLog(type, message);
   }, [terminalLog]);
 
-  // Deploy handlers
-  const handleDeployStart = useCallback(() => {
-    setDeploying(true);
-  }, []);
-
+  const handleDeployStart = useCallback(() => { setDeploying(true); }, []);
   const handleDeployEnd = useCallback((url: string | null) => {
     setDeploying(false);
-    if (url) {
-      setDeployedUrl(url);
-      setCfConnected(true);
-      showToast(`Deployed to ${url}`);
-    }
+    if (url) { setDeployedUrl(url); setCfConnected(true); showToast(`Deployed to ${url}`); }
   }, []);
 
   const handleTopBarDeploy = useCallback(async () => {
-    if (!cfConnected || !projectId) {
-      terminalLog('warning', 'Connect Cloudflare in the Deploy panel first');
-      return;
-    }
+    if (!cfConnected || !projectId) { terminalLog('warning', 'Connect Cloudflare in the Deploy panel first'); return; }
     setDeploying(true);
     terminalLog('command', '> Deploying to Cloudflare Pages...');
     const res = await api.post<{ url: string }>(`/api/projects/${projectId}/deploy`);
-    if (res.success && res.data) {
-      terminalLog('success', `Deployed to ${res.data.url}`);
-      setDeployedUrl(res.data.url);
-      showToast(`Deployed to ${res.data.url}`);
-    } else {
-      terminalLog('error', `Deploy failed: ${res.error}`);
-    }
+    if (res.success && res.data) { terminalLog('success', `Deployed to ${res.data.url}`); setDeployedUrl(res.data.url); showToast(`Deployed to ${res.data.url}`); }
+    else { terminalLog('error', `Deploy failed: ${res.error}`); }
     setDeploying(false);
   }, [cfConnected, projectId, terminalLog]);
 
+  // Streaming generation handler
   const handleSend = useCallback(async (overrideMessage?: string) => {
     const userMsg = (overrideMessage || input).trim();
     if (!userMsg || generating || !projectId) return;
     if (!overrideMessage) setInput('');
     setGenerating(true);
-    setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: userMsg, created_at: new Date().toISOString() }]);
 
     const truncated = userMsg.length > 80 ? userMsg.slice(0, 80) + '...' : userMsg;
     terminalLog('command', `> Generate: "${truncated}"`);
-    terminalLog('info', 'Sending prompt to Figi AI...');
+    terminalLog('info', 'Sending to Figi AI...');
 
-    const res = await api.post<{ message: string; files: Array<{ path: string; language: string }>; preview_html: string | null }>(`/api/projects/${projectId}/generate`, { message: userMsg });
-    if (res.success && res.data) {
-      const changedPaths = (res.data.files || []).map(f => f.path);
+    // Add user message
+    const userMsgId = Date.now();
+    setMessages(prev => [...prev, { id: userMsgId, role: 'user', content: userMsg, created_at: new Date().toISOString() }]);
 
-      setMessages(prev => [...prev, {
-        id: Date.now() + 1, role: 'assistant', content: res.data!.message,
-        created_at: new Date().toISOString(), changedFiles: changedPaths,
-      }]);
+    // Add streaming assistant placeholder
+    const assistantMsgId = userMsgId + 1;
+    setMessages(prev => [...prev, { id: assistantMsgId, role: 'assistant', content: '', created_at: new Date().toISOString(), isStreaming: true }]);
 
-      terminalLog('success', `Generated ${changedPaths.length} file${changedPaths.length !== 1 ? 's' : ''}`);
-      changedPaths.forEach(p => terminalLog('info', `  📄 ${p}`));
+    try {
+      const token = localStorage.getItem('figi_studio_token');
+      const response = await fetch(`${API_BASE}/api/projects/${projectId}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ message: userMsg }),
+      });
 
-      if (changedPaths.length > 0) {
-        setFiles(prev => {
-          const updated = [...prev];
-          for (const f of res.data!.files) {
-            const idx = updated.findIndex(x => x.path === f.path);
-            if (idx >= 0) {
-              updated[idx] = { ...updated[idx], ...f, updated_at: new Date().toISOString() };
-            } else {
-              updated.push({ id: Date.now(), path: f.path, language: f.language, updated_at: new Date().toISOString() } as FileData);
-            }
-          }
-          return updated;
-        });
-        setRecentlyChanged(new Set(changedPaths));
-        setTimeout(() => setRecentlyChanged(new Set()), 5000);
-
-        api.get<{ files: FileData[] }>(`/api/projects/${projectId}/files`).then(filesRes => {
-          if (filesRes.success && filesRes.data) {
-            const contents: Record<string, string> = {};
-            for (const f of filesRes.data.files) {
-              if (f.content) contents[f.path] = f.content;
-            }
-            setFileContents(contents);
-            setFiles(filesRes.data.files);
-          }
-        });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({ error: 'Generation failed' }));
+        throw new Error(errData.error || 'Generation failed');
       }
 
-      if (res.data.preview_html) {
-        setPreviewHtml(res.data.preview_html);
-        setPreviewKey(k => k + 1);
-        terminalLog('success', 'Preview updated.');
-        showToast(`${changedPaths.length} file${changedPaths.length !== 1 ? 's' : ''} generated — preview updated`);
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let accumulatedText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+
+        for (const eventBlock of events) {
+          const lines = eventBlock.split('\n');
+          let eventType = '';
+          let eventData = '';
+          for (const line of lines) {
+            if (line.startsWith('event: ')) eventType = line.slice(7);
+            if (line.startsWith('data: ')) eventData = line.slice(6);
+          }
+          if (!eventType || !eventData) continue;
+
+          try {
+            const data = JSON.parse(eventData);
+            switch (eventType) {
+              case 'start':
+                terminalLog('info', 'Figi is building...');
+                break;
+              case 'delta':
+                accumulatedText += data.text;
+                setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: accumulatedText } : m));
+                break;
+              case 'complete': {
+                const changedPaths: string[] = data.generatedFiles || [];
+                setMessages(prev => prev.map(m => m.id === assistantMsgId
+                  ? { ...m, content: data.message, isStreaming: false, changedFiles: changedPaths }
+                  : m));
+                // Update files and contents
+                if (data.files) {
+                  const newFiles = data.files as FileData[];
+                  setFiles(newFiles);
+                  const contents: Record<string, string> = {};
+                  for (const f of newFiles) { if (f.content) contents[f.path] = f.content; }
+                  setFileContents(contents);
+                  const indexFile = newFiles.find((f: FileData) => f.path === 'index.html');
+                  if (indexFile?.content) {
+                    setPreviewHtml(indexFile.content);
+                    setPreviewKey(k => k + 1);
+                  }
+                }
+                if (changedPaths.length > 0) {
+                  setRecentlyChanged(new Set(changedPaths));
+                  setTimeout(() => setRecentlyChanged(new Set()), 5000);
+                }
+                terminalLog('success', `Generated ${changedPaths.length} file${changedPaths.length !== 1 ? 's' : ''}`);
+                changedPaths.forEach(p => terminalLog('info', `  📄 ${p}`));
+                terminalLog('success', 'Preview updated.');
+                showToast(`${changedPaths.length} file${changedPaths.length !== 1 ? 's' : ''} generated`);
+                break;
+              }
+              case 'error':
+                setMessages(prev => prev.map(m => m.id === assistantMsgId
+                  ? { ...m, content: `Error: ${data.message}`, isStreaming: false }
+                  : m));
+                terminalLog('error', `Generation failed: ${data.message}`);
+                break;
+            }
+          } catch { /* skip malformed */ }
+        }
       }
-    } else {
-      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: `Sorry, something went wrong: ${res.error}`, created_at: new Date().toISOString() }]);
-      terminalLog('error', `Generation failed: ${res.error}`);
+    } catch (err) {
+      setMessages(prev => prev.map(m => m.id === assistantMsgId
+        ? { ...m, content: `Error: ${(err as Error).message}`, isStreaming: false }
+        : m));
+      terminalLog('error', `${(err as Error).message}`);
+    } finally {
+      setGenerating(false);
     }
-    setGenerating(false);
   }, [input, generating, projectId, terminalLog]);
 
   useEffect(() => {
@@ -257,41 +282,18 @@ export default function StudioPage() {
   return (
     <>
       <StudioLayout
-        project={project}
-        messages={messages}
-        files={files}
-        fileContents={fileContents}
-        input={input}
-        generating={generating}
-        previewHtml={previewHtml}
-        previewKey={previewKey}
-        recentlyChanged={recentlyChanged}
-        userName={user?.name}
-        projectId={projectId || ''}
-        terminalLines={terminalLines}
-        terminalLog={handleTerminalLog}
-        terminalClear={terminalClear}
-        deployedUrl={deployedUrl}
-        deploying={deploying}
-        cfConnected={cfConnected}
-        onInputChange={setInput}
-        onSend={() => handleSend()}
-        onSuggestionClick={setInput}
-        onRefreshPreview={() => setPreviewKey(k => k + 1)}
-        onOpenLive={openInNewTab}
-        onBack={() => navigate('/dashboard')}
-        onLogout={logout}
-        onFileUpdated={handleFileUpdated}
-        onFilesChanged={handleFilesChanged}
-        onDeployStart={handleDeployStart}
-        onDeployEnd={handleDeployEnd}
-        onDeploy={handleTopBarDeploy}
+        project={project} messages={messages} files={files} fileContents={fileContents}
+        input={input} generating={generating} previewHtml={previewHtml} previewKey={previewKey}
+        recentlyChanged={recentlyChanged} userName={user?.name} projectId={projectId || ''}
+        terminalLines={terminalLines} terminalLog={handleTerminalLog} terminalClear={terminalClear}
+        deployedUrl={deployedUrl} deploying={deploying} cfConnected={cfConnected}
+        onInputChange={setInput} onSend={() => handleSend()} onSuggestionClick={setInput}
+        onRefreshPreview={() => setPreviewKey(k => k + 1)} onOpenLive={openInNewTab}
+        onBack={() => navigate('/dashboard')} onLogout={logout}
+        onFileUpdated={handleFileUpdated} onFilesChanged={handleFilesChanged}
+        onDeployStart={handleDeployStart} onDeployEnd={handleDeployEnd} onDeploy={handleTopBarDeploy}
       />
-      <ErrorBridge
-        errorMessage={previewError}
-        onFixIt={handleFixError}
-        onDismiss={() => setPreviewError(null)}
-      />
+      <ErrorBridge errorMessage={previewError} onFixIt={handleFixError} onDismiss={() => setPreviewError(null)} />
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-2.5 rounded-xl text-sm font-medium text-white animate-fade-in z-50"
           style={{ background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.3)' }}>

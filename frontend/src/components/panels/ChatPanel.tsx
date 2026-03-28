@@ -6,6 +6,7 @@ interface Message {
   content: string;
   created_at: string;
   changedFiles?: string[];
+  isStreaming?: boolean;
 }
 
 interface ChatPanelProps {
@@ -75,7 +76,8 @@ export default function ChatPanel({ messages, input, generating, onInputChange, 
                   color: 'var(--text-primary)',
                   borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
                 }}>
-                {msg.content}
+                <span>{msg.content}</span>
+                {msg.isStreaming && <span className="streaming-cursor" />}
               </div>
               {msg.changedFiles && msg.changedFiles.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -91,7 +93,7 @@ export default function ChatPanel({ messages, input, generating, onInputChange, 
           </div>
         ))}
 
-        {generating && (
+        {generating && !messages.some(m => m.isStreaming) && (
           <div className="flex gap-2.5 animate-fade-in">
             <div className="text-xl">🤖</div>
             <div className="px-4 py-3 rounded-2xl" style={{ background: 'rgba(51,65,85,0.3)', border: '1px solid var(--border-color)' }}>

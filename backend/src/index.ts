@@ -39,6 +39,21 @@ const router = AutoRouter({
 // Health
 router.get('/api/health', () => json({ success: true, status: 'running', version: '1.0.0' }));
 
+// Templates (static)
+router.get('/api/templates', () => json({
+  success: true,
+  data: {
+    templates: [
+      { id: 'todo-app', name: 'Todo App', description: 'Task manager with add, complete, and delete. Great for learning React state.', icon: '✅', category: 'Starter', prompt: 'Build me a todo app where I can add tasks, mark them complete, and delete them. Use a dark theme with smooth animations. Include a task counter showing completed vs total.', designStyle: 'neumorphism' },
+      { id: 'landing-page', name: 'SaaS Landing Page', description: 'Product landing page with hero, features, pricing, testimonials, and footer.', icon: '🚀', category: 'Business', prompt: 'Build a modern SaaS product landing page with a bold hero section, 3-column features grid, pricing table with 3 tiers (Free, Pro, Enterprise), testimonials section with 3 quotes, and a footer with links. Include separate pages for Features, Pricing, and About with working navigation between all pages. Make it visually stunning.', designStyle: 'glassmorphism' },
+      { id: 'portfolio', name: 'Developer Portfolio', description: 'Personal portfolio to showcase your projects and skills.', icon: '👤', category: 'Personal', prompt: 'Build a developer portfolio website with a hero section showing name and title, an about section, a projects grid showing 4 project cards with images and descriptions, a skills section with technology icons, and a contact form. Use a dark professional theme.', designStyle: 'material' },
+      { id: 'dashboard', name: 'Analytics Dashboard', description: 'Data dashboard with charts, stats cards, and sidebar navigation.', icon: '📊', category: 'Business', prompt: 'Build an analytics dashboard with a sidebar navigation, top stat cards showing key metrics (revenue, users, growth, conversion), a main chart area showing a line graph, a recent activity table, and a notification panel. Use a dark theme with accent colors for data visualization.', designStyle: 'material' },
+      { id: 'blog', name: 'Blog Platform', description: 'Blog with post listing, individual post pages, and categories.', icon: '📝', category: 'Content', prompt: 'Build a blog platform with a home page showing a grid of blog post cards (title, excerpt, date, category tag), separate full post pages for each of 4 articles with realistic content, a sidebar with categories and recent posts, and a header with navigation. Generate separate HTML files for each post page.', designStyle: 'claymorphism' },
+      { id: 'ecommerce', name: 'Online Store', description: 'Product catalog with grid layout, product details, and cart.', icon: '🛒', category: 'Business', prompt: 'Build an online store with a product grid showing 8 products with images, names, and prices. Include a product detail page with larger image, description, size/color selectors, and add-to-cart button. Add a shopping cart sidebar that slides in showing added items with quantity controls and a checkout total. Use a clean modern design.', designStyle: 'neo-brutalism' },
+    ],
+  },
+}));
+
 // Auth routes
 router.post('/api/auth/register', (req, env) => authRoutes.register(req, env));
 router.post('/api/auth/login', (req, env) => authRoutes.login(req, env));

@@ -57,6 +57,13 @@ body {
 
 @keyframes blink { 50% { opacity: 0; } }
 
+.streaming-cursor::after {
+  content: '▊';
+  animation: blink 0.8s step-end infinite;
+  color: var(--accent-orange);
+  margin-left: 2px;
+}
+
 /* React Flow dark theme overrides */
 .react-flow__node {
   font-family: 'JetBrains Mono', monospace;
