@@ -1,38 +1,75 @@
-import { json } from 'itty-router';
+import { json, IRequest } from 'itty-router';
 import { Env } from '../index';
 import { getUser } from './auth';
 
-const SYSTEM_PROMPT = `You are Professor Figi, an expert full-stack developer and teacher inside Figi Studio — an AI-powered app builder.
+const DAILY_GENERATION_LIMIT = 50;
 
-When a user describes what they want to build or change, you:
-1. Generate complete, working code files
-2. Briefly explain what you built and why (1-2 sentences max per file)
-3. Always use the Figi Code stack: Cloudflare Workers (TypeScript) + D1 (SQLite) + React 18 + Tailwind CSS
+const SYSTEM_PROMPT = `You are Figi, an expert AI app builder for Figi Studio. You build complete full-stack web applications using React + Tailwind (frontend) and Cloudflare Workers + D1 (backend).
 
-RESPONSE FORMAT — always respond with valid JSON matching this exact structure:
+RESPONSE FORMAT:
+Always respond with valid JSON containing a "files" array and a "message" string:
+
 {
-  "message": "Brief explanation of what you built (2-3 sentences, encouraging, in Professor Figi's voice)",
+  "message": "Your conversational response explaining what you built/changed",
   "files": [
     {
-      "path": "relative/path/to/file.tsx",
-      "content": "complete file content here",
-      "language": "typescript"
+      "path": "index.html",
+      "content": "<!DOCTYPE html>...",
+      "language": "html"
+    },
+    {
+      "path": "src/App.jsx",
+      "content": "import React from 'react'...",
+      "language": "jsx"
     }
-  ],
-  "preview_ready": true
+  ]
 }
 
-RULES:
-- Always generate COMPLETE files, never partial snippets
-- Use Tailwind CSS for all styling — dark theme (#0b1120 background, #FF8C42 orange accents)
-- React components use hooks, no class components
-- Backend uses TypeScript strict mode
-- All API responses: { success: boolean, data?: any, error?: string }
-- Include proper error handling and loading states
-- For new apps, always generate at minimum: index.html (or App.tsx), a main component, and basic styling
-- Keep explanations warm and encouraging like a teacher, not robotic
-- For simple frontend apps, just generate HTML/CSS/JS in a single index.html
-- For full-stack apps, generate separate frontend and backend files
+FILE GENERATION RULES:
+1. For a NEW app, generate ALL files needed:
+   - index.html (entry point with React CDN + Tailwind CDN)
+   - src/App.jsx (main React component)
+   - src/components/*.jsx (UI components)
+   - src/styles.css (custom styles if needed)
+   - worker/index.js (Cloudflare Worker API routes — only if app needs a backend)
+   - worker/schema.sql (D1 database schema — only if app needs data storage)
+
+2. For UPDATES to an existing app, only include files that changed.
+   Do NOT re-send unchanged files.
+
+3. ALWAYS use CDN imports in index.html (no bundler needed):
+   - React: <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+   - ReactDOM: <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+   - Babel: <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+   - Tailwind: <script src="https://cdn.tailwindcss.com"></script>
+
+4. In index.html, use type="text/babel" for JSX support:
+   <script type="text/babel">
+     // All component code goes here
+   </script>
+
+5. Use INLINE components in the script tag (no import/export — CDN React doesn't support modules).
+   Put ALL component code in a single script block or use multiple script tags.
+
+6. Make every app:
+   - Mobile-responsive (Tailwind responsive classes)
+   - Dark mode by default (bg-gray-900/bg-slate-900, light text)
+   - Professional looking (proper spacing, modern fonts)
+   - Interactive (forms work, buttons do things, state updates)
+
+7. When the user asks for backend features (auth, database, API):
+   - Generate worker/index.js with itty-router patterns
+   - Generate worker/schema.sql with CREATE TABLE statements
+   - Frontend should call the API using fetch()
+
+8. Add helpful comments explaining what each section does.
+
+CONVERSATION RULES:
+- Be conversational and encouraging in your "message" — you are Professor Figi
+- Explain what you built and WHY each piece exists
+- Reference Figi Code curriculum when relevant ("This is what Chapter 7 teaches — your API is the waiter carrying data to the kitchen")
+- If something might break, warn the user and explain the fix
+- Suggest next steps ("Want me to add user auth? Or style the dashboard?")
 
 CRITICAL — DO NOT:
 - NEVER hardcode API keys or include x-api-key headers in generated frontend code
@@ -41,8 +78,51 @@ CRITICAL — DO NOT:
 - If the user asks for persistence, use React state for session data or explain that backend storage via the API is available
 - All fetch calls from generated frontends should go to the project's own backend API, never to third-party APIs with hardcoded credentials`;
 
+/**
+ * Build a combined preview HTML from all project frontend files.
+ * If an index.html exists, use it as the shell.
+ * Otherwise, generate a basic shell that loads React/Tailwind CDNs
+ * and injects CSS + JSX from the project files.
+ */
+function buildPreview(files: Array<{ path: string; content: string; language?: string }>): string {
+  const indexHtml = files.find(f => f.path === 'index.html');
+
+  if (indexHtml?.content) {
+    // Use the generated index.html as-is — it should already include CDN scripts
+    return indexHtml.content;
+  }
+
+  // No index.html — build a shell from component files
+  const cssFiles = files.filter(f => f.path.endsWith('.css') && !f.path.startsWith('worker/'));
+  const jsFiles = files.filter(
+    f => (f.path.endsWith('.jsx') || f.path.endsWith('.js') || f.path.endsWith('.tsx') || f.path.endsWith('.ts'))
+      && !f.path.startsWith('worker/')
+  );
+
+  const css = cssFiles.map(f => f.content).join('\n');
+  const js = jsFiles.map(f => f.content).join('\n\n');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>App Preview</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>${css}</style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">${js}</script>
+</body>
+</html>`;
+}
+
 export const generateRoutes = {
-  async generate(req: Request & { params: { id: string } }, env: Env): Promise<Response> {
+  async generate(req: IRequest, env: Env): Promise<Response> {
     const user = await getUser(req, env);
     if (!user) return json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
@@ -51,6 +131,19 @@ export const generateRoutes = {
     if (!project) return json({ success: false, error: 'Project not found' }, { status: 404 });
 
     try {
+      // --- Rate limiting: 50 generations per user per day ---
+      const today = new Date().toISOString().split('T')[0];
+      const usage = await env.DB.prepare(
+        "SELECT COUNT(*) as count FROM messages WHERE project_id IN (SELECT id FROM projects WHERE user_id = ?) AND role = 'user' AND created_at >= ?"
+      ).bind(user.id, today + 'T00:00:00').first<{ count: number }>();
+
+      if (usage && usage.count >= DAILY_GENERATION_LIMIT) {
+        return json({
+          success: false,
+          error: `Daily generation limit reached (${DAILY_GENERATION_LIMIT}/day). Upgrade for unlimited.`,
+        }, { status: 429 });
+      }
+
       const { message } = await req.json() as { message: string };
       if (!message?.trim()) return json({ success: false, error: 'Message required' }, { status: 400 });
 
@@ -68,17 +161,21 @@ export const generateRoutes = {
         'SELECT path, content FROM files WHERE project_id = ? ORDER BY path ASC'
       ).bind(project.id).all<{ path: string; content: string }>();
 
-      // Build context about existing files
+      // Build context about existing files — include full content for small files, truncated for large ones
       const fileContext = existingFiles.length > 0
-        ? `\n\nEXISTING PROJECT FILES:\n${existingFiles.map(f => `--- ${f.path} ---\n${f.content?.slice(0, 500)}${(f.content?.length || 0) > 500 ? '...' : ''}`).join('\n\n')}`
+        ? `\n\nEXISTING PROJECT FILES:\n${existingFiles.map(f => {
+            const content = f.content || '';
+            const truncated = content.length > 1500 ? content.slice(0, 1500) + '\n... (truncated)' : content;
+            return `--- ${f.path} ---\n${truncated}`;
+          }).join('\n\n')}`
         : '';
 
       // Build messages for Claude
-      const messages = [
+      const claudeMessages = [
         ...history.slice(0, -1).map(h => ({ role: h.role as 'user' | 'assistant', content: h.content })),
         {
           role: 'user' as const,
-          content: `Project: "${project.name}" — ${project.description}${fileContext}\n\nUser request: ${message.trim()}`
+          content: `Project: "${project.name}" — ${project.description || 'No description'}${fileContext}\n\nUser request: ${message.trim()}`
         }
       ];
 
@@ -92,9 +189,9 @@ export const generateRoutes = {
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 8096,
+          max_tokens: 16000,
           system: SYSTEM_PROMPT,
-          messages,
+          messages: claudeMessages,
         }),
       });
 
@@ -107,20 +204,21 @@ export const generateRoutes = {
       const rawText = claudeData.content[0]?.text || '';
 
       // Parse JSON response from Claude
-      let parsed: { message: string; files: Array<{ path: string; content: string; language: string }>; preview_ready: boolean };
+      let parsed: { message: string; files: Array<{ path: string; content: string; language: string }> };
       try {
-        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-        parsed = JSON.parse(jsonMatch?.[0] || rawText);
+        // Try to extract JSON from the response (Claude may wrap it in markdown code fences)
+        const jsonMatch = rawText.match(/```json\s*([\s\S]*?)\s*```/) || rawText.match(/\{[\s\S]*\}/);
+        const jsonStr = jsonMatch?.[1] || jsonMatch?.[0] || rawText;
+        parsed = JSON.parse(jsonStr);
       } catch {
         // Fallback if Claude doesn't return valid JSON
         parsed = {
           message: rawText.slice(0, 500),
           files: [],
-          preview_ready: false,
         };
       }
 
-      // Save files to DB
+      // Upsert each generated file to D1
       for (const file of parsed.files || []) {
         await env.DB.prepare(`
           INSERT INTO files (project_id, path, content, language, updated_at)
@@ -138,16 +236,19 @@ export const generateRoutes = {
       await env.DB.prepare('INSERT INTO messages (project_id, role, content) VALUES (?, ?, ?)')
         .bind(project.id, 'assistant', parsed.message).run();
 
-      // Find index.html content for instant srcdoc preview
-      const indexFile = (parsed.files || []).find(f => f.path === 'index.html');
+      // Build combined preview from ALL project files (not just the ones from this generation)
+      const { results: allProjectFiles } = await env.DB.prepare(
+        'SELECT path, content, language FROM files WHERE project_id = ? ORDER BY path ASC'
+      ).bind(project.id).all<{ path: string; content: string; language: string }>();
+
+      const previewHtml = buildPreview(allProjectFiles);
 
       return json({
         success: true,
         data: {
           message: parsed.message,
-          files: parsed.files || [],
-          preview_html: indexFile?.content || null,
-          preview_ready: parsed.preview_ready || false,
+          files: (parsed.files || []).map(f => ({ path: f.path, language: f.language || 'text' })),
+          preview_html: previewHtml,
         }
       });
     } catch (e: unknown) {

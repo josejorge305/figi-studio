@@ -13,8 +13,16 @@ export interface Env {
   CLOUDFLARE_ACCOUNT_ID: string;
 }
 
+const ALLOWED_ORIGINS = [
+  'https://figi-studio.pages.dev',
+  'https://figicode.com',
+  'https://figi-studio.figicode.com',
+  'http://localhost:5173',
+  'http://localhost:3000',
+];
+
 const { preflight, corsify } = cors({
-  origin: '*',
+  origin: (origin: string) => ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
 });

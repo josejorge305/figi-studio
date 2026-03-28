@@ -4,7 +4,7 @@ AI-powered full-stack app builder. Chat interface + live preview + instant deplo
 
 ## Stack
 - Frontend: React 18 + Vite + Tailwind CSS → Cloudflare Pages (figi-studio.pages.dev)
-- Backend: Cloudflare Workers + TypeScript → figi-studio-api.jjreliant.workers.dev
+- Backend: Cloudflare Workers + TypeScript → figi-studio-api.tummybuddy.workers.dev
 - Database: D1 (SQLite) — figi-studio-db
 
 ## Design

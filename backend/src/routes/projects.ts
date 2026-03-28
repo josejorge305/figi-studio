@@ -1,4 +1,4 @@
-import { json } from 'itty-router';
+import { json, IRequest } from 'itty-router';
 import { Env } from '../index';
 import { getUser } from './auth';
 
@@ -38,7 +38,7 @@ export const projectRoutes = {
     }
   },
 
-  async get(req: Request & { params: { id: string } }, env: Env): Promise<Response> {
+  async get(req: IRequest, env: Env): Promise<Response> {
     const user = await getUser(req, env);
     if (!user) return json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
@@ -51,7 +51,7 @@ export const projectRoutes = {
     return json({ success: true, data: { project, messages, files } });
   },
 
-  async delete(req: Request & { params: { id: string } }, env: Env): Promise<Response> {
+  async delete(req: IRequest, env: Env): Promise<Response> {
     const user = await getUser(req, env);
     if (!user) return json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
@@ -65,7 +65,7 @@ export const projectRoutes = {
     return json({ success: true, data: { deleted: true } });
   },
 
-  async getFiles(req: Request & { params: { id: string } }, env: Env): Promise<Response> {
+  async getFiles(req: IRequest, env: Env): Promise<Response> {
     const user = await getUser(req, env);
     if (!user) return json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
@@ -76,7 +76,7 @@ export const projectRoutes = {
     return json({ success: true, data: { files: results } });
   },
 
-  async getMessages(req: Request & { params: { id: string } }, env: Env): Promise<Response> {
+  async getMessages(req: IRequest, env: Env): Promise<Response> {
     const user = await getUser(req, env);
     if (!user) return json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
@@ -87,7 +87,7 @@ export const projectRoutes = {
     return json({ success: true, data: { messages: results } });
   },
 
-  async preview(req: Request & { params: { id: string } }, env: Env): Promise<Response> {
+  async preview(req: IRequest, env: Env): Promise<Response> {
     // Serve the project's index.html directly as HTML — no auth required so iframe can load it
     const file = await env.DB.prepare(
       "SELECT content FROM files WHERE project_id = ? AND path = 'index.html'"
