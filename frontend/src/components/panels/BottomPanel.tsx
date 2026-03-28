@@ -116,7 +116,7 @@ export default function BottomPanel({
               onClear={terminalClear}
             />
           )}
-          {activeTab === 'learn' && <LearnPanel files={files} />}
+          {activeTab === 'learn' && <LearnPanel files={files} fileContents={fileContents} selectedFile={selectedFile} />}
         </div>
       )}
     </div>

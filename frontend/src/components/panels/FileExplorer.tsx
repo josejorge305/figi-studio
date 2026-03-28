@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../../utils/api';
+import { getBadgeForPath } from '../../data/curriculumMap';
 
 interface FileData {
   id: number;
@@ -268,6 +269,8 @@ function TreeItem({ node, depth, selectedFile, recentlyChanged, onFileSelect, ex
   const isSelected = node.path === selectedFile;
   const isChanged = recentlyChanged.has(node.path);
 
+  const badge = getBadgeForPath(node.isFolder ? node.name : node.path);
+
   if (node.isFolder) {
     return (
       <div>
@@ -287,6 +290,12 @@ function TreeItem({ node, depth, selectedFile, recentlyChanged, onFileSelect, ex
           <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{isExpanded ? '▼' : '▶'}</span>
           <span>📁</span>
           <span>{node.name}</span>
+          {badge && (
+            <span className="text-[9px] px-1.5 rounded shrink-0" style={{
+              background: `${badge.color}22`, color: badge.color,
+              lineHeight: '16px', height: '16px',
+            }}>{badge.label}</span>
+          )}
         </button>
         {isExpanded && node.children.map(child => (
           <TreeItem key={child.path} node={child} depth={depth + 1}
@@ -316,6 +325,12 @@ function TreeItem({ node, depth, selectedFile, recentlyChanged, onFileSelect, ex
     >
       <span className="text-xs">{getFileIcon(node.path)}</span>
       <span className="flex-1 truncate">{node.name}</span>
+      {badge && (
+        <span className="text-[9px] px-1.5 rounded shrink-0" style={{
+          background: `${badge.color}22`, color: badge.color,
+          lineHeight: '16px', height: '16px',
+        }}>{badge.label}</span>
+      )}
       <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>🤖</span>
       {isChanged && (
         <span className="text-[9px] px-1 rounded" style={{ background: 'rgba(249,115,22,0.15)', color: 'var(--accent-orange)' }}>new</span>

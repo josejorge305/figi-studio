@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
 import { useTerminal } from '../hooks/useTerminal';
 import StudioLayout from '../components/panels/StudioLayout';
+import ErrorBridge from '../components/panels/ErrorBridge';
 
 interface Message { id: number; role: 'user' | 'assistant'; content: string; created_at: string; changedFiles?: string[]; }
 interface FileData { id: number; path: string; language: string; content?: string; updated_at: string; }
@@ -31,6 +32,8 @@ export default function StudioPage() {
   const [deployedUrl, setDeployedUrl] = useState<string | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [cfConnected, setCfConnected] = useState(false);
+
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const { lines: terminalLines, log: terminalLog, clear: terminalClear } = useTerminal();
 
@@ -232,11 +235,16 @@ export default function StudioPage() {
     function handleMessage(event: MessageEvent) {
       if (event.data?.type === 'preview-error') {
         terminalLog('error', `Preview error: ${event.data.message}`);
+        setPreviewError(event.data.message);
       }
     }
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
   }, [terminalLog]);
+
+  const handleFixError = useCallback((errorMsg: string) => {
+    handleSend(`Fix this error in my code: ${errorMsg}`);
+  }, [handleSend]);
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
@@ -278,6 +286,11 @@ export default function StudioPage() {
         onDeployStart={handleDeployStart}
         onDeployEnd={handleDeployEnd}
         onDeploy={handleTopBarDeploy}
+      />
+      <ErrorBridge
+        errorMessage={previewError}
+        onFixIt={handleFixError}
+        onDismiss={() => setPreviewError(null)}
       />
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-2.5 rounded-xl text-sm font-medium text-white animate-fade-in z-50"

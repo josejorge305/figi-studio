@@ -104,7 +104,7 @@ function generateDiagramNodes(anatomy: AnatomyData): { nodes: Node[]; edges: Edg
       id: 'frontend-group',
       type: 'group',
       position: { x: 0, y: 0 },
-      data: { label: '🎨 Frontend' },
+      data: { label: '🎨 Frontend · Ch8' },
       style: {
         background: 'rgba(34, 197, 94, 0.08)',
         border: '1px solid rgba(34, 197, 94, 0.3)',
@@ -145,7 +145,7 @@ function generateDiagramNodes(anatomy: AnatomyData): { nodes: Node[]; edges: Edg
       id: 'backend-group',
       type: 'group',
       position: { x: 300, y: 0 },
-      data: { label: '⚡ Backend' },
+      data: { label: '⚡ Backend · Ch7' },
       style: {
         background: 'rgba(59, 130, 246, 0.08)',
         border: '1px solid rgba(59, 130, 246, 0.3)',
@@ -188,7 +188,7 @@ function generateDiagramNodes(anatomy: AnatomyData): { nodes: Node[]; edges: Edg
       id: 'database-group',
       type: 'group',
       position: { x: 600, y: 0 },
-      data: { label: '🗄️ Database' },
+      data: { label: '🗄️ Database · Ch7' },
       style: {
         background: 'rgba(168, 85, 247, 0.08)',
         border: '1px solid rgba(168, 85, 247, 0.3)',
@@ -393,9 +393,9 @@ export default function AnatomyPanel({ files, fileContents, onFileSelected }: An
         color: '#9ca3af',
         whiteSpace: 'nowrap',
       }}>
-        <span><span style={{ color: '#22c55e' }}>●</span> Frontend</span>
-        <span><span style={{ color: '#3b82f6' }}>●</span> Backend</span>
-        <span><span style={{ color: '#a855f7' }}>●</span> Database</span>
+        <span><span style={{ color: '#22c55e' }}>●</span> Frontend (Ch8)</span>
+        <span><span style={{ color: '#3b82f6' }}>●</span> Backend (Ch7)</span>
+        <span><span style={{ color: '#a855f7' }}>●</span> Database (Ch7)</span>
         <span><span style={{ color: '#f97316' }}>●</span> Entry Point</span>
         <span style={{ color: '#6b7280', fontStyle: 'italic' }}>Click any node to open file</span>
       </div>
