@@ -32,7 +32,14 @@ RULES:
 - For new apps, always generate at minimum: index.html (or App.tsx), a main component, and basic styling
 - Keep explanations warm and encouraging like a teacher, not robotic
 - For simple frontend apps, just generate HTML/CSS/JS in a single index.html
-- For full-stack apps, generate separate frontend and backend files`;
+- For full-stack apps, generate separate frontend and backend files
+
+CRITICAL — DO NOT:
+- NEVER hardcode API keys or include x-api-key headers in generated frontend code
+- NEVER use localStorage, sessionStorage, or IndexedDB in generated apps — use React state (useState/useReducer) for session data instead
+- NEVER make direct calls to api.anthropic.com from frontend code — all AI calls must go through the backend API
+- If the user asks for persistence, use React state for session data or explain that backend storage via the API is available
+- All fetch calls from generated frontends should go to the project's own backend API, never to third-party APIs with hardcoded credentials`;
 
 export const generateRoutes = {
   async generate(req: Request & { params: { id: string } }, env: Env): Promise<Response> {
@@ -84,7 +91,7 @@ export const generateRoutes = {
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-5',
+          model: 'claude-sonnet-4-5-20250514',
           max_tokens: 8096,
           system: SYSTEM_PROMPT,
           messages,
