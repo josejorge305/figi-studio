@@ -91,7 +91,7 @@ export const generateRoutes = {
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-5-20250514',
+          model: 'claude-sonnet-4-20250514',
           max_tokens: 8096,
           system: SYSTEM_PROMPT,
           messages,
