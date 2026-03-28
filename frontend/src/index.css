@@ -2,11 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Existing Figi dark palette */
+  --bg-primary: #0f1117;
+  --bg-secondary: #1a1d27;
+  --bg-tertiary: #252830;
+  --border-color: #2a2d37;
+  --border-active: #3a3d47;
+
+  /* Text */
+  --text-primary: #e4e4e7;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+
+  /* Accent colors */
+  --accent-orange: #f97316;
+  --accent-purple: #a855f7;
+  --accent-green: #22c55e;
+  --accent-blue: #3b82f6;
+  --accent-red: #ef4444;
+  --accent-yellow: #eab308;
+  --accent-cyan: #06b6d4;
+
+  /* Panel-specific */
+  --panel-header-bg: #1e2028;
+  --tab-active-bg: #252830;
+  --tab-inactive-bg: transparent;
+  --sidebar-width: 260px;
+  --bottom-panel-height: 250px;
+  --topbar-height: 48px;
+}
+
 * { box-sizing: border-box; }
 
 body {
-  background-color: #0b1120;
-  color: white;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
   font-family: 'Outfit', sans-serif;
   margin: 0;
 }
