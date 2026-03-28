@@ -4,6 +4,8 @@ import { projectRoutes } from './routes/projects';
 import { generateRoutes } from './routes/generate';
 import { githubRoutes } from './routes/github';
 import { cloudflareRoutes } from './routes/cloudflare';
+import { guidedPathsRoutes } from './routes/guided-paths';
+import { progressRoutes } from './routes/progress';
 
 export interface Env {
   DB: D1Database;
@@ -92,6 +94,14 @@ router.get('/api/cloudflare/status', (req, env) => cloudflareRoutes.status(req, 
 router.delete('/api/cloudflare/disconnect', (req, env) => cloudflareRoutes.disconnect(req, env));
 router.post('/api/projects/:id/deploy', (req, env) => cloudflareRoutes.deploy(req, env));
 router.get('/api/projects/:id/deployments', (req, env) => cloudflareRoutes.deployments(req, env));
+
+// Guided paths
+router.get('/api/guided-paths', () => guidedPathsRoutes.list());
+router.get('/api/guided-paths/:pathId', (req) => guidedPathsRoutes.getPath(req));
+
+// Progress sync
+router.get('/api/user/figi-code-progress', (req, env) => progressRoutes.getFigiCodeProgress(req, env));
+router.post('/api/user/award-xp', (req, env) => progressRoutes.awardXP(req, env));
 
 // 404
 router.all('*', () => error(404, 'Not found'));

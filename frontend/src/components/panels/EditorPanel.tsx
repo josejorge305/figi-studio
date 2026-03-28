@@ -19,6 +19,7 @@ interface EditorPanelProps {
   onFileSelect: (path: string) => void;
   onFileClose: (path: string) => void;
   onFileUpdated: (path: string, content: string) => void;
+  onExplainCode?: (code: string, filePath: string) => void;
 }
 
 const FILE_ICONS: Record<string, string> = {
@@ -54,12 +55,16 @@ function getMonacoLanguage(langOrPath: string): string {
 
 export default function EditorPanel({
   openFiles, selectedFile, files, fileContents, projectId,
-  onFileSelect, onFileClose, onFileUpdated,
+  onFileSelect, onFileClose, onFileUpdated, onExplainCode,
 }: EditorPanelProps) {
   const [editedContent, setEditedContent] = useState<Record<string, string>>({});
   const [unsavedFiles, setUnsavedFiles] = useState<Set<string>>(new Set());
   const [savingFile, setSavingFile] = useState<string | null>(null);
+  const [showExplainButton, setShowExplainButton] = useState(false);
+  const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const [explainButtonPos, setExplainButtonPos] = useState({ x: 0, y: 0 });
   const editorRef = useRef<any>(null);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
 
   const activeFileData = files.find(f => f.path === selectedFile);
   const displayContent = selectedFile
@@ -120,6 +125,33 @@ export default function EditorPanel({
       },
     });
     monaco.editor.setTheme('figi-dark');
+
+    // Listen for selection changes to show "Explain This" button
+    editor.onDidChangeCursorSelection((e) => {
+      const selection = editor.getModel()?.getValueInRange(e.selection);
+      if (selection && selection.trim().length > 10 && selection.length < 5000) {
+        setSelectedCode(selection);
+        setShowExplainButton(true);
+        const coords = editor.getScrolledVisiblePosition(e.selection.getStartPosition());
+        if (coords && editorContainerRef.current) {
+          const containerRect = editorContainerRef.current.getBoundingClientRect();
+          setExplainButtonPos({
+            x: Math.min(coords.left + 60, containerRect.width - 140),
+            y: Math.max(coords.top - 36, 4),
+          });
+        }
+      } else {
+        setShowExplainButton(false);
+        setSelectedCode(null);
+      }
+    });
+  };
+
+  const handleExplainClick = () => {
+    if (selectedCode && selectedFile && onExplainCode) {
+      onExplainCode(selectedCode, selectedFile);
+      setShowExplainButton(false);
+    }
   };
 
   const handleCloseTab = (path: string, e: React.MouseEvent) => {
@@ -193,7 +225,7 @@ export default function EditorPanel({
       </div>
 
       {/* Monaco Editor */}
-      <div className="flex-1 relative overflow-hidden">
+      <div ref={editorContainerRef} className="flex-1 relative overflow-hidden">
         <Editor
           height="100%"
           language={language}
@@ -226,6 +258,28 @@ export default function EditorPanel({
           }}
           onMount={handleEditorMount}
         />
+
+        {/* Explain This floating button */}
+        {showExplainButton && onExplainCode && (
+          <button
+            onClick={handleExplainClick}
+            className="absolute z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all animate-fade-in"
+            style={{
+              left: explainButtonPos.x,
+              top: explainButtonPos.y,
+              background: 'rgba(168,85,247,0.9)',
+              color: 'white',
+              border: '1px solid rgba(168,85,247,0.5)',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+              cursor: 'pointer',
+              backdropFilter: 'blur(8px)',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(168,85,247,1)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(168,85,247,0.9)'}>
+            🎓 Explain This
+          </button>
+        )}
+
         {/* Save hint */}
         {selectedFile && unsavedFiles.has(selectedFile) && (
           <div className="absolute bottom-3 right-4 px-2 py-1 rounded text-[11px]"

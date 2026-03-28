@@ -4,7 +4,40 @@ import { getUser } from './auth';
 
 const DAILY_GENERATION_LIMIT = 50;
 
-const SYSTEM_PROMPT = `You are Figi, an expert AI app builder for Figi Studio. You build complete full-stack web applications using React + Tailwind (frontend) and Cloudflare Workers + D1 (backend).
+type ChatMode = 'build' | 'learn' | 'debug';
+
+interface ChatContext {
+  activeFile?: string;
+  activeFileContent?: string;
+  errorMessage?: string;
+  selectedCode?: string;
+}
+
+function detectChatMode(message: string, context: ChatContext): ChatMode {
+  const lower = message.toLowerCase();
+
+  // DEBUG indicators
+  if (context.errorMessage) return 'debug';
+  if (lower.includes('fix') && (lower.includes('error') || lower.includes('bug') || lower.includes('broken'))) return 'debug';
+  if (lower.includes('why is') && (lower.includes('not working') || lower.includes('crashing') || lower.includes('failing'))) return 'debug';
+  if (lower.includes('debug') || lower.includes('what went wrong')) return 'debug';
+
+  // LEARN indicators
+  if (context.selectedCode) return 'learn';
+  if (lower.includes('explain') || lower.includes('what does') || lower.includes('what is')) return 'learn';
+  if (lower.includes('how does') || lower.includes('how do') || lower.includes('why does')) return 'learn';
+  if (lower.includes('teach me') || lower.includes('help me understand') || lower.includes('what are')) return 'learn';
+  if (lower.startsWith('what') || lower.startsWith('why') || lower.startsWith('how')) {
+    if (!lower.includes('build') && !lower.includes('create') && !lower.includes('add') && !lower.includes('make')) {
+      return 'learn';
+    }
+  }
+
+  // BUILD (default)
+  return 'build';
+}
+
+const BUILD_SYSTEM_PROMPT = `You are Figi, an expert AI app builder for Figi Studio. You build complete full-stack web applications using React + Tailwind (frontend) and Cloudflare Workers + D1 (backend).
 
 RESPONSE FORMAT:
 Always respond with valid JSON containing a "files" array and a "message" string:
@@ -88,13 +121,115 @@ CRITICAL — DO NOT:
 - If the user asks for persistence, use React state for session data or explain that backend storage via the API is available
 - All fetch calls from generated frontends should go to the project's own backend API, never to third-party APIs with hardcoded credentials`;
 
+function buildLearnSystemPrompt(context: ChatContext): string {
+  let prompt = `You are Professor Figi — the AI coding tutor inside Figi Studio. You teach coding concepts by explaining the student's ACTUAL code, not abstract examples.
+
+PERSONALITY:
+- Warm, encouraging, slightly playful — like a cool older sibling who's a senior developer
+- Use analogies from everyday life to explain technical concepts
+- Never condescending — every question is a good question
+- Celebrate understanding: "Exactly! You got it."
+- Use the student's own code as examples whenever possible
+
+TEACHING STYLE:
+- Start with the "what" (one sentence explaining the concept)
+- Then the "why" (why this matters / what problem it solves)
+- Then the "how" (using their actual code as the example)
+- End with a connection to the bigger picture ("This is how every React app manages data")
+
+RULES:
+- NEVER generate or modify files in learn mode — only explain
+- If the student asks you to build/create/add something, tell them: "Switch to Build mode and I'll create that for you! Just type your request normally."
+- Reference specific lines from their code when explaining
+- When relevant, mention which Figi Code chapter covers this topic in depth (use the chapter mapping provided)
+- Keep explanations concise — 2-3 paragraphs max unless the student asks for more detail
+- Use code snippets to illustrate points, but don't generate full files
+- If explaining an error, always end with the fix and WHY the fix works
+- Do NOT wrap your response in JSON. Just respond with plain text/markdown.
+
+CHAPTER REFERENCES (use naturally, don't force):
+- React/JSX/Components → Ch8: Building the Screen
+- API/Backend/Workers → Ch7: Building the Brain
+- Database/SQL/D1 → Ch7: Building the Brain
+- Git/GitHub → Ch3: Git — Your Code's Save System
+- Terminal/CLI → Ch2: Your Computer is a Dev Machine
+- Claude Code/AI → Ch4: Claude Code — Your AI Co-Pilot
+- Prompting → Ch5: The Art of the Prompt
+- TypeScript → Ch6: Guardrails — Why Rules Matter
+- Errors/Debugging → Ch9: Reading Errors Without Panicking
+- Deployment → Ch10: Ship It — Go Live
+- AI APIs/Claude API → Ch11: Add AI to Your Apps
+- Advanced Tools → Ch12: Level Up — Advanced Tools
+
+CONTEXT: You have access to the student's project files. When they ask about something, reference their actual code.`;
+
+  if (context.activeFile) {
+    prompt += `\nThe student is currently viewing: ${context.activeFile}`;
+  }
+  if (context.activeFileContent) {
+    prompt += `\nFile content:\n\`\`\`\n${context.activeFileContent}\n\`\`\``;
+  }
+  if (context.selectedCode) {
+    prompt += `\nThe student selected this code and asked about it:\n\`\`\`\n${context.selectedCode}\n\`\`\``;
+  }
+
+  return prompt;
+}
+
+function buildDebugSystemPrompt(context: ChatContext): string {
+  let prompt = `You are Professor Figi in debug mode inside Figi Studio. A student hit an error and needs help.
+
+APPROACH:
+1. First, explain the error in plain English (one sentence — what happened)
+2. Show exactly WHERE in their code the problem is (reference the line/file)
+3. Explain WHY it happened (the underlying concept)
+4. Provide the FIX — generate the corrected file(s) using the standard JSON file format so the code updates in their project
+5. Explain what the fix does and why it works (one sentence)
+6. Mention the relevant Figi Code chapter if applicable
+
+PERSONALITY: Calm and reassuring. Errors are learning opportunities, not failures.
+"This is one of the most common React errors — you'll see it a hundred times and eventually fix it in your sleep."
+
+RULES:
+- In debug mode, you CAN generate/modify files (to apply the fix)
+- Always respond with valid JSON containing a "files" array and a "message" string (same format as build mode)
+- The "message" should contain your explanation of the error and fix
+- The "files" array should contain the corrected file(s)
+- Keep the explanation brief — fix first, explain after
+- If the error is in AI-generated code, own it: "Looks like I made a mistake in the code I generated. Let me fix that."
+
+RESPONSE FORMAT (same as build mode):
+{
+  "message": "Your explanation of the error and fix",
+  "files": [
+    { "path": "filename", "content": "corrected content", "language": "lang" }
+  ]
+}
+
+ERROR CONTEXT:`;
+
+  if (context.errorMessage) {
+    prompt += `\nError: ${context.errorMessage}`;
+  } else {
+    prompt += `\nNo specific error provided — student is asking for debugging help.`;
+  }
+  if (context.activeFile) {
+    prompt += `\nFile with error: ${context.activeFile}`;
+  }
+  if (context.activeFileContent) {
+    prompt += `\nFile content:\n\`\`\`\n${context.activeFileContent}\n\`\`\``;
+  }
+
+  return prompt;
+}
+
 function parseGeneratedResponse(rawText: string): { message: string; files: Array<{ path: string; content: string; language: string }> } {
   try {
     const jsonMatch = rawText.match(/```json\s*([\s\S]*?)\s*```/) || rawText.match(/\{[\s\S]*\}/);
     const jsonStr = jsonMatch?.[1] || jsonMatch?.[0] || rawText;
     return JSON.parse(jsonStr);
   } catch {
-    return { message: rawText.slice(0, 500), files: [] };
+    return { message: rawText.slice(0, 5000), files: [] };
   }
 }
 
@@ -117,8 +252,12 @@ export const generateRoutes = {
         return new Response(JSON.stringify({ success: false, error: `Daily limit reached (${DAILY_GENERATION_LIMIT}/day).` }), { status: 429, headers: { 'Content-Type': 'application/json' } });
       }
 
-      const { message } = await req.json() as { message: string };
+      const body = await req.json() as { message: string; mode?: 'auto' | 'build' | 'learn' | 'debug'; context?: ChatContext };
+      const { message, mode = 'auto', context = {} } = body;
       if (!message?.trim()) return new Response(JSON.stringify({ success: false, error: 'Message required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+
+      // Detect mode
+      const resolvedMode: ChatMode = mode === 'auto' ? detectChatMode(message, context) : mode as ChatMode;
 
       const { results: history } = await env.DB.prepare(
         'SELECT role, content FROM messages WHERE project_id = ? ORDER BY created_at ASC LIMIT 20'
@@ -136,11 +275,28 @@ export const generateRoutes = {
           }).join('\n\n')}`
         : '';
 
+      // Select system prompt based on mode
+      let systemPrompt: string;
+      switch (resolvedMode) {
+        case 'learn':
+          systemPrompt = buildLearnSystemPrompt(context);
+          break;
+        case 'debug':
+          systemPrompt = buildDebugSystemPrompt(context);
+          break;
+        default:
+          systemPrompt = BUILD_SYSTEM_PROMPT;
+          break;
+      }
+
+      // Append file context to all modes
+      systemPrompt += fileContext;
+
       const claudeMessages = [
         ...history.map(h => ({ role: h.role as 'user' | 'assistant', content: h.content })),
         {
           role: 'user' as const,
-          content: `Project: "${project.name}" — ${project.description || 'No description'}${fileContext}\n\nUser request: ${message.trim()}`
+          content: `Project: "${project.name}" — ${project.description || 'No description'}\n\nUser request: ${message.trim()}`
         }
       ];
 
@@ -155,7 +311,7 @@ export const generateRoutes = {
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 16000,
-          system: SYSTEM_PROMPT,
+          system: systemPrompt,
           messages: claudeMessages,
           stream: true,
         }),
@@ -177,6 +333,7 @@ export const generateRoutes = {
       const projectId = project.id;
       const userMessage = message.trim();
       const db = env.DB;
+      const currentMode = resolvedMode;
 
       const processStream = async () => {
         let fullText = '';
@@ -185,7 +342,7 @@ export const generateRoutes = {
         let buffer = '';
 
         try {
-          await sendSSE('start', { timestamp: Date.now() });
+          await sendSSE('start', { timestamp: Date.now(), mode: currentMode });
 
           while (true) {
             const { done, value } = await reader.read();
@@ -212,8 +369,19 @@ export const generateRoutes = {
             }
           }
 
-          // Stream complete — parse files
-          const result = parseGeneratedResponse(fullText);
+          // Stream complete — handle based on mode
+          let resultMessage: string;
+          let resultFiles: Array<{ path: string; content: string; language: string }> = [];
+
+          if (currentMode === 'learn') {
+            // Learn mode: no file parsing, plain text response
+            resultMessage = fullText;
+          } else {
+            // Build and debug modes: parse JSON response with files
+            const result = parseGeneratedResponse(fullText);
+            resultMessage = result.message;
+            resultFiles = result.files || [];
+          }
 
           // Save user message
           await db.prepare('INSERT INTO messages (project_id, role, content) VALUES (?, ?, ?)')
@@ -221,10 +389,10 @@ export const generateRoutes = {
 
           // Save assistant message
           await db.prepare('INSERT INTO messages (project_id, role, content) VALUES (?, ?, ?)')
-            .bind(projectId, 'assistant', result.message).run();
+            .bind(projectId, 'assistant', resultMessage).run();
 
-          // Upsert files
-          for (const file of result.files || []) {
+          // Upsert files (only for build and debug modes)
+          for (const file of resultFiles) {
             await db.prepare(`
               INSERT INTO files (project_id, path, content, language, updated_at)
               VALUES (?, ?, ?, ?, datetime('now'))
@@ -242,9 +410,10 @@ export const generateRoutes = {
           ).bind(projectId).all();
 
           await sendSSE('complete', {
-            message: result.message,
-            files: allFiles.results,
-            generatedFiles: (result.files || []).map(f => f.path),
+            message: resultMessage,
+            mode: currentMode,
+            files: currentMode === 'learn' ? undefined : allFiles.results,
+            generatedFiles: currentMode === 'learn' ? [] : resultFiles.map(f => f.path),
           });
 
         } catch (err) {

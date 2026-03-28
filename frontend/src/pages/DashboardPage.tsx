@@ -3,8 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8787';
+
 interface Project { id: number; name: string; description: string; subdomain: string; preview_url: string; status: string; created_at: string; updated_at: string; }
 interface Template { id: string; name: string; description: string; icon: string; category: string; prompt: string; designStyle: string; }
+interface GuidedPathSummary {
+  id: string; name: string; description: string; difficulty: string; duration: string;
+  icon: string; chapters_covered: string[]; xp_reward: number; stepCount: number;
+}
 
 const DESIGN_STYLES = [
   { id: 'modern', name: 'Modern Clean', description: 'Minimal and professional', emoji: '✨', prompt: 'Use a clean, modern design with plenty of white space, subtle shadows, rounded corners (8-12px), a neutral color palette with one accent color, and clean sans-serif typography. Prefer cards with subtle borders over heavy backgrounds.' },
@@ -14,14 +20,18 @@ const DESIGN_STYLES = [
   { id: 'neumorphism', name: 'Neumorphism', description: 'Soft extruded surfaces', emoji: '🌗', prompt: 'Use neumorphism/soft UI design: elements appear extruded from or pressed into the background using matching-color shadows. Use a single muted background color, dual shadows (one light, one dark) to create depth.' },
 ];
 
-const DESIGN_STYLE_MAP: Record<string, string> = {};
-DESIGN_STYLES.forEach(s => { DESIGN_STYLE_MAP[s.id] = s.prompt; });
+const DIFFICULTY_COLORS: Record<string, string> = {
+  beginner: '#22c55e',
+  intermediate: '#f97316',
+  advanced: '#ef4444',
+};
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [guidedPaths, setGuidedPaths] = useState<GuidedPathSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [newName, setNewName] = useState('');
@@ -37,6 +47,10 @@ export default function DashboardPage() {
 
     api.get<{ templates: Template[] }>('/api/templates').then(res => {
       if (res.success && res.data) setTemplates(res.data.templates);
+    });
+
+    api.get<{ paths: GuidedPathSummary[] }>('/api/guided-paths').then(res => {
+      if (res.success && res.data) setGuidedPaths(res.data.paths);
     });
   }, []);
 
@@ -80,6 +94,25 @@ export default function DashboardPage() {
     setCreating(false);
   };
 
+  const startGuidedPath = async (pathId: string) => {
+    // Fetch full path data
+    const pathRes = await api.get<{ path: any }>(`/api/guided-paths/${pathId}`);
+    if (!pathRes.success || !pathRes.data) return;
+
+    const guidedPath = pathRes.data.path;
+    setCreating(true);
+    const res = await api.post<{ project: Project }>('/api/projects', {
+      name: guidedPath.name,
+      description: `Guided Build Path: ${guidedPath.description}`,
+    });
+    if (res.success && res.data) {
+      navigate(`/studio/${res.data.project.id}`, {
+        state: { guidedPath },
+      });
+    }
+    setCreating(false);
+  };
+
   const deleteProject = async (e: React.MouseEvent, projectId: number) => {
     e.stopPropagation();
     if (!window.confirm('Delete this project? This can\'t be undone.')) return;
@@ -98,8 +131,10 @@ export default function DashboardPage() {
       user={user}
       logout={logout}
       templates={displayTemplates}
+      guidedPaths={guidedPaths}
       creating={creating}
       onCreate={createFromOnboarding}
+      onStartGuidedPath={startGuidedPath}
       onTemplateClick={(t) => openCreateModal(t)}
       showModal={showModal}
       setShowModal={setShowModal}
@@ -141,6 +176,49 @@ export default function DashboardPage() {
             <p className="text-white/35 text-xs">Start building with AI</p>
           </div>
         </button>
+
+        {/* Guided Build Paths */}
+        {guidedPaths.length > 0 && (
+          <div className="mb-10">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">🎓</span>
+              <p className="text-white/60 text-xs font-medium uppercase tracking-wider">Guided Build Paths</p>
+            </div>
+            <p className="text-white/30 text-xs mb-4">Learn by building — Professor Figi coaches you through each step</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {guidedPaths.map(gp => (
+                <button key={gp.id} onClick={() => startGuidedPath(gp.id)} disabled={creating}
+                  className="text-left p-5 rounded-2xl transition-all hover:scale-[1.02]"
+                  style={{ background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.15)' }}>
+                  <div className="flex items-start justify-between mb-3">
+                    <span className="text-2xl">{gp.icon}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                      style={{ background: `${DIFFICULTY_COLORS[gp.difficulty] || '#f97316'}15`, color: DIFFICULTY_COLORS[gp.difficulty] || '#f97316' }}>
+                      {gp.difficulty}
+                    </span>
+                  </div>
+                  <h3 className="text-white font-bold text-sm mb-1">{gp.name}</h3>
+                  <p className="text-white/40 text-xs mb-3 line-clamp-2">{gp.description}</p>
+                  <div className="flex items-center gap-3 text-[10px]">
+                    <span style={{ color: 'var(--text-muted)' }}>{gp.duration}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{gp.stepCount} steps</span>
+                    <span style={{ color: '#a855f7' }}>{gp.xp_reward} XP</span>
+                  </div>
+                  <div className="flex gap-1.5 mt-3">
+                    {gp.chapters_covered.map(ch => (
+                      <span key={ch} className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(168,85,247,0.1)', color: '#a855f7' }}>
+                        {ch.toUpperCase()}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mt-3 text-[11px] font-semibold" style={{ color: '#a855f7' }}>
+                    Start Building →
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Templates */}
         {displayTemplates.length > 0 && (
@@ -206,9 +284,10 @@ export default function DashboardPage() {
 }
 
 // ── Onboarding component ──────────────────────────────────────
-function OnboardingView({ user, logout, templates, creating, onCreate, onTemplateClick, showModal, setShowModal, newName, setNewName, newDesc, setNewDesc, selectedStyle, setSelectedStyle, createProject }: {
-  user: any; logout: () => void; templates: Template[]; creating: boolean;
+function OnboardingView({ user, logout, templates, guidedPaths, creating, onCreate, onStartGuidedPath, onTemplateClick, showModal, setShowModal, newName, setNewName, newDesc, setNewDesc, selectedStyle, setSelectedStyle, createProject }: {
+  user: any; logout: () => void; templates: Template[]; guidedPaths: GuidedPathSummary[]; creating: boolean;
   onCreate: (prompt: string, style: string) => void;
+  onStartGuidedPath: (pathId: string) => void;
   onTemplateClick: (t: Template) => void;
   showModal: boolean; setShowModal: (v: boolean) => void;
   newName: string; setNewName: (v: string) => void;
@@ -277,6 +356,33 @@ function OnboardingView({ user, logout, templates, creating, onCreate, onTemplat
             </div>
           </div>
 
+          {/* Guided Build Paths */}
+          {guidedPaths.length > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-sm">🎓</span>
+                <p className="text-white/50 text-xs font-medium">Learn by Building</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {guidedPaths.map(gp => (
+                  <button key={gp.id} onClick={() => onStartGuidedPath(gp.id)} disabled={creating}
+                    className="text-left p-4 rounded-xl transition-all hover:scale-[1.03]"
+                    style={{ background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.15)' }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">{gp.icon}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full"
+                        style={{ background: `${DIFFICULTY_COLORS[gp.difficulty] || '#f97316'}15`, color: DIFFICULTY_COLORS[gp.difficulty] || '#f97316' }}>
+                        {gp.difficulty}
+                      </span>
+                    </div>
+                    <p className="text-white/80 text-[12px] font-semibold mb-0.5">{gp.name}</p>
+                    <p className="text-white/30 text-[10px]">{gp.duration} · {gp.xp_reward} XP</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Templates */}
           {templates.length > 0 && (
             <div className="mb-8">
@@ -301,7 +407,7 @@ function OnboardingView({ user, logout, templates, creating, onCreate, onTemplat
                 { icon: '🔧', text: 'AI builds your full app in seconds' },
                 { icon: '📁', text: 'See & edit every file with a real code editor' },
                 { icon: '🗺️', text: 'Architecture diagram shows how it connects' },
-                { icon: '🎓', text: 'Errors link to Figi Code lessons' },
+                { icon: '🎓', text: 'Professor Figi teaches you as you build' },
                 { icon: '☁️', text: 'Deploy live to Cloudflare (Pro)' },
                 { icon: '🌿', text: 'Push to GitHub (Pro)' },
               ].map(f => (

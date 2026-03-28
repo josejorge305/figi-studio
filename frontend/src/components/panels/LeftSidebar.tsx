@@ -24,12 +24,13 @@ interface LeftSidebarProps {
   terminalLog: (type: 'info' | 'success' | 'error' | 'warning' | 'system' | 'command' | 'ai', message: string) => void;
   onDeployStart: () => void;
   onDeployEnd: (url: string | null) => void;
+  onExplainFile?: (path: string) => void;
 }
 
 export default function LeftSidebar({
   collapsed, onToggle, files, selectedFile, recentlyChanged, onFileSelect,
   width, onResizeStart, projectId, onFilesChanged,
-  terminalLog, onDeployStart, onDeployEnd,
+  terminalLog, onDeployStart, onDeployEnd, onExplainFile,
 }: LeftSidebarProps) {
   return (
     <div className="relative shrink-0 flex" style={{ width: collapsed ? 48 : width }}>
@@ -76,6 +77,7 @@ export default function LeftSidebar({
               onFileSelect={onFileSelect}
               projectId={projectId}
               onFilesChanged={onFilesChanged}
+              onExplainFile={onExplainFile}
             />
             <GitPanel projectId={projectId} terminalLog={terminalLog} />
             <CloudflarePanel

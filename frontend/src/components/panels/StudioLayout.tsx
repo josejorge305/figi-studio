@@ -4,18 +4,11 @@ import LeftSidebar from './LeftSidebar';
 import ChatPanel from './ChatPanel';
 import PreviewPanel from './PreviewPanel';
 import BottomPanel from './BottomPanel';
+import GuidedModeBar from './GuidedModeBar';
 import type { TerminalLine } from '../../hooks/useTerminal';
+import type { ChatMode, Message } from './ChatPanel';
 
 type BottomTab = 'editor' | 'anatomy' | 'terminal' | 'learn';
-
-interface Message {
-  id: number;
-  role: 'user' | 'assistant';
-  content: string;
-  created_at: string;
-  changedFiles?: string[];
-  isStreaming?: boolean;
-}
 
 interface FileData {
   id: number;
@@ -31,6 +24,30 @@ interface Project {
   description: string;
   subdomain: string;
   status: string;
+}
+
+interface GuidedStep {
+  step: number;
+  title: string;
+  figiSays: string;
+  buildPrompt: string;
+  designStyle?: string;
+  afterExplanation: string;
+  conceptsIntroduced: string[];
+}
+
+interface GuidedPath {
+  id: string;
+  name: string;
+  icon: string;
+  steps: GuidedStep[];
+  xp_reward: number;
+}
+
+interface GuidedState {
+  path: GuidedPath;
+  currentStep: number;
+  status: 'intro' | 'building' | 'explaining' | 'ready_for_next' | 'complete';
 }
 
 interface StudioLayoutProps {
@@ -51,6 +68,11 @@ interface StudioLayoutProps {
   deployedUrl: string | null;
   deploying: boolean;
   cfConnected: boolean;
+  chatMode: ChatMode;
+  onModeChange: (mode: ChatMode) => void;
+  guidedState: GuidedState | null;
+  onGuidedSendPrompt: () => void;
+  onGuidedNextStep: () => void;
   onInputChange: (value: string) => void;
   onSend: () => void;
   onSuggestionClick: (text: string) => void;
@@ -63,6 +85,12 @@ interface StudioLayoutProps {
   onDeployStart: () => void;
   onDeployEnd: (url: string | null) => void;
   onDeploy: () => void;
+  onExplainFile: (path: string) => void;
+  onExplainCode: (code: string, filePath: string) => void;
+  onAskFigiAboutFile: (path: string) => void;
+  onAskFigiAboutArchitecture: () => void;
+  onAskFigiAboutError: (error: string) => void;
+  onActiveFileChange: (path: string | null) => void;
 }
 
 export default function StudioLayout({
@@ -70,8 +98,12 @@ export default function StudioLayout({
   previewHtml, previewKey, recentlyChanged, userName, projectId,
   terminalLines, terminalLog, terminalClear,
   deployedUrl, deploying, cfConnected,
+  chatMode, onModeChange,
+  guidedState, onGuidedSendPrompt, onGuidedNextStep,
   onInputChange, onSend, onSuggestionClick, onRefreshPreview, onOpenLive, onBack, onLogout,
   onFileUpdated, onFilesChanged, onDeployStart, onDeployEnd, onDeploy,
+  onExplainFile, onExplainCode, onAskFigiAboutFile, onAskFigiAboutArchitecture, onAskFigiAboutError,
+  onActiveFileChange,
 }: StudioLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(260);
@@ -100,20 +132,23 @@ export default function StudioLayout({
 
   const handleFileSelect = useCallback((path: string) => {
     setSelectedFile(path);
+    onActiveFileChange(path);
     setOpenFiles(prev => prev.includes(path) ? prev : [...prev, path]);
     setActiveBottomTab('editor');
     if (bottomPanelCollapsed) setBottomPanelCollapsed(false);
-  }, [bottomPanelCollapsed]);
+  }, [bottomPanelCollapsed, onActiveFileChange]);
 
   const handleFileClose = useCallback((path: string) => {
     setOpenFiles(prev => {
       const next = prev.filter(p => p !== path);
       if (selectedFile === path) {
-        setSelectedFile(next.length > 0 ? next[next.length - 1] : null);
+        const newSelected = next.length > 0 ? next[next.length - 1] : null;
+        setSelectedFile(newSelected);
+        onActiveFileChange(newSelected);
       }
       return next;
     });
-  }, [selectedFile]);
+  }, [selectedFile, onActiveFileChange]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!resizingRef.current) return;
@@ -185,14 +220,28 @@ export default function StudioLayout({
             terminalLog={terminalLog}
             onDeployStart={onDeployStart}
             onDeployEnd={onDeployEnd}
+            onExplainFile={onExplainFile}
           />
         ) : null}
 
         <div ref={mainAreaRef} className="flex-1 flex flex-col overflow-hidden">
           <div className={`flex-1 flex overflow-hidden ${isMobile ? 'flex-col' : ''}`}>
-            <div style={{ width: isMobile ? '100%' : `${chatWidthPercent}%`, height: isMobile ? '50%' : '100%' }}>
-              <ChatPanel messages={messages} input={input} generating={generating}
-                onInputChange={onInputChange} onSend={onSend} onSuggestionClick={onSuggestionClick} />
+            <div className="flex flex-col" style={{ width: isMobile ? '100%' : `${chatWidthPercent}%`, height: isMobile ? '50%' : '100%' }}>
+              {/* Guided Mode Bar */}
+              {guidedState && (
+                <GuidedModeBar
+                  guidedState={guidedState}
+                  onSendPrompt={onGuidedSendPrompt}
+                  onNextStep={onGuidedNextStep}
+                  generating={generating}
+                />
+              )}
+              <div className="flex-1 min-h-0">
+                <ChatPanel messages={messages} input={input} generating={generating}
+                  currentMode={chatMode}
+                  onInputChange={onInputChange} onSend={onSend}
+                  onSuggestionClick={onSuggestionClick} onModeChange={onModeChange} />
+              </div>
             </div>
             {!isMobile && (
               <div onMouseDown={(e) => startResize('chat', e)}
@@ -217,6 +266,10 @@ export default function StudioLayout({
             onFileSelect={handleFileSelect} onFileClose={handleFileClose}
             onFileUpdated={onFileUpdated}
             terminalLines={terminalLines} terminalClear={terminalClear}
+            onExplainCode={onExplainCode}
+            onAskFigiAboutFile={onAskFigiAboutFile}
+            onAskFigiAboutArchitecture={onAskFigiAboutArchitecture}
+            onAskFigiAboutError={onAskFigiAboutError}
           />
         </div>
       </div>
