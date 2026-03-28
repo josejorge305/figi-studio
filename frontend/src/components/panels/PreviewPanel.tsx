@@ -1,17 +1,75 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 type Viewport = 'desktop' | 'tablet' | 'mobile';
+
+interface FileData {
+  id: number;
+  path: string;
+  language: string;
+  content?: string;
+  updated_at: string;
+}
 
 interface PreviewPanelProps {
   previewHtml: string | null;
   previewKey: number;
   generating: boolean;
+  files: FileData[];
+  fileContents: Record<string, string>;
   onRefresh: () => void;
   onOpenLive: () => void;
 }
 
-export default function PreviewPanel({ previewHtml, previewKey, generating, onRefresh, onOpenLive }: PreviewPanelProps) {
+// Inject navigation interceptor + error catcher into HTML
+function injectPreviewScripts(html: string): string {
+  const script = `<script>
+document.addEventListener('click',function(e){var a=e.target.closest('a');if(!a)return;var h=a.getAttribute('href');if(!h)return;if(h.startsWith('http')||h.startsWith('#')||h.startsWith('mailto:')||h.startsWith('tel:')||h.startsWith('javascript:'))return;e.preventDefault();var p=h.replace(/^\\.?\\//,'');window.parent.postMessage({type:'navigate',page:p},'*')});
+window.onerror=function(m,u,l){window.parent.postMessage({type:'preview-error',message:m+(l?' (line '+l+')':'')},'*')};
+window.addEventListener('unhandledrejection',function(e){window.parent.postMessage({type:'preview-error',message:'Unhandled rejection: '+e.reason},'*')});
+</script>`;
+
+  // Insert before </body> or at end
+  if (html.includes('</body>')) {
+    return html.replace('</body>', script + '</body>');
+  }
+  return html + script;
+}
+
+export default function PreviewPanel({ previewHtml, previewKey, generating, files, fileContents, onRefresh, onOpenLive }: PreviewPanelProps) {
   const [viewport, setViewport] = useState<Viewport>('desktop');
+  const [previewPage, setPreviewPage] = useState('index.html');
+
+  const htmlPages = useMemo(() => files.filter(f => f.path.endsWith('.html')), [files]);
+
+  // Reset to index.html when files change significantly
+  useEffect(() => {
+    setPreviewPage('index.html');
+  }, [files.length]);
+
+  // Listen for navigation messages from iframe
+  useEffect(() => {
+    function handleMessage(event: MessageEvent) {
+      if (event.data?.type === 'navigate') {
+        const page = event.data.page;
+        const exists = files.some(f => f.path === page);
+        if (exists) {
+          setPreviewPage(page);
+        }
+      }
+    }
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [files]);
+
+  // Determine the HTML to show
+  const displayHtml = useMemo(() => {
+    if (previewPage !== 'index.html') {
+      const pageContent = fileContents[previewPage];
+      if (pageContent) return injectPreviewScripts(pageContent);
+    }
+    if (previewHtml) return injectPreviewScripts(previewHtml);
+    return null;
+  }, [previewHtml, previewPage, fileContents]);
 
   const viewportWidth = viewport === 'mobile' ? '375px' : viewport === 'tablet' ? '768px' : '100%';
 
@@ -47,7 +105,7 @@ export default function PreviewPanel({ previewHtml, previewKey, generating, onRe
             title="Refresh preview">
             🔄
           </button>
-          {previewHtml && (
+          {displayHtml && (
             <button onClick={onOpenLive}
               className="px-2 py-1 rounded text-[11px] transition-colors"
               style={{ color: 'var(--text-muted)' }}
@@ -60,19 +118,39 @@ export default function PreviewPanel({ previewHtml, previewKey, generating, onRe
         </div>
       </div>
 
+      {/* Page breadcrumb bar */}
+      {htmlPages.length > 1 && (
+        <div className="flex items-center gap-1 px-2 py-1 shrink-0 overflow-x-auto"
+          style={{ background: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-color)' }}>
+          {htmlPages.map(page => (
+            <button key={page.path} onClick={() => setPreviewPage(page.path)}
+              className="shrink-0 px-2 py-0.5 rounded text-[11px] transition-colors"
+              style={{
+                background: previewPage === page.path ? 'var(--accent-orange)' : 'transparent',
+                color: previewPage === page.path ? '#000' : 'var(--text-secondary)',
+                border: previewPage === page.path ? 'none' : '1px solid var(--border-color)',
+                fontFamily: "'JetBrains Mono', monospace",
+                fontWeight: previewPage === page.path ? 600 : 400,
+              }}>
+              {page.path}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Preview iframe */}
       <div className="flex-1 relative overflow-hidden flex justify-center">
-        {generating && !previewHtml && (
+        {generating && !displayHtml && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center" style={{ background: 'rgba(6,8,16,0.85)' }}>
             <div className="text-4xl mb-3 animate-pulse">🤖</div>
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Building your app...</p>
           </div>
         )}
-        {previewHtml ? (
+        {displayHtml ? (
           <div className="h-full" style={{ width: viewportWidth, maxWidth: '100%', transition: 'width 0.3s ease' }}>
             <iframe
-              key={previewKey}
-              srcDoc={previewHtml}
+              key={`${previewKey}-${previewPage}`}
+              srcDoc={displayHtml}
               className="w-full h-full border-0"
               title="App Preview"
               sandbox="allow-scripts allow-modals allow-forms allow-popups"

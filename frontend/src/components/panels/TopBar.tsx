@@ -3,12 +3,28 @@ interface TopBarProps {
   projectStatus: string;
   userName?: string;
   previewHtml: string | null;
+  deployedUrl: string | null;
+  deploying: boolean;
+  cfConnected: boolean;
   onBack: () => void;
   onOpenLive: () => void;
   onLogout: () => void;
+  onDeploy: () => void;
 }
 
-export default function TopBar({ projectName, projectStatus, userName, previewHtml, onBack, onOpenLive, onLogout }: TopBarProps) {
+export default function TopBar({
+  projectName, projectStatus, userName, previewHtml,
+  deployedUrl, deploying, cfConnected,
+  onBack, onOpenLive, onLogout, onDeploy,
+}: TopBarProps) {
+  const handleOpenLive = () => {
+    if (deployedUrl) {
+      window.open(deployedUrl, '_blank');
+    } else {
+      onOpenLive();
+    }
+  };
+
   return (
     <div className="flex items-center justify-between px-4 shrink-0"
       style={{ height: 'var(--topbar-height)', background: 'var(--panel-header-bg)', borderBottom: '1px solid var(--border-color)' }}>
@@ -27,17 +43,25 @@ export default function TopBar({ projectName, projectStatus, userName, previewHt
         </span>
       </div>
       <div className="flex items-center gap-3">
-        <button disabled
-          className="text-xs px-3 py-1.5 rounded-lg font-medium opacity-50 cursor-not-allowed"
-          style={{ background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.2)', color: 'var(--accent-orange)' }}
-          title="Coming soon — Phase 2">
-          Deploy ▶
+        <button
+          onClick={onDeploy}
+          disabled={deploying}
+          className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
+          style={{
+            background: deploying ? 'rgba(249,115,22,0.2)' : 'rgba(249,115,22,0.1)',
+            border: '1px solid rgba(249,115,22,0.2)',
+            color: 'var(--accent-orange)',
+            opacity: deploying ? 0.7 : 1,
+            cursor: deploying ? 'wait' : 'pointer',
+          }}
+          title={cfConnected ? 'Deploy to Cloudflare' : 'Connect Cloudflare in the Deploy panel first'}>
+          {deploying ? '⟳ Deploying…' : 'Deploy ▶'}
         </button>
-        {previewHtml && (
-          <button onClick={onOpenLive}
+        {(previewHtml || deployedUrl) && (
+          <button onClick={handleOpenLive}
             className="text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
             style={{ background: 'rgba(255,140,66,0.1)', border: '1px solid rgba(255,140,66,0.2)', color: 'var(--accent-orange)' }}>
-            Open Live ↗
+            {deployedUrl ? 'Open Live ↗' : 'Preview ↗'}
           </button>
         )}
         <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{userName}</span>

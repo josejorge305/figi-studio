@@ -24,6 +24,8 @@ async function handleResponse<T>(res: Response): Promise<{ success: boolean; dat
 export const api = {
   get: async <T>(path: string) => handleResponse<T>(await fetch(`${BASE}${path}`, { headers: getHeaders() })),
   post: async <T>(path: string, data?: unknown, auth = true) => handleResponse<T>(await fetch(`${BASE}${path}`, { method: 'POST', headers: getHeaders(auth), body: JSON.stringify(data) })),
+  put: async <T>(path: string, data?: unknown) => handleResponse<T>(await fetch(`${BASE}${path}`, { method: 'PUT', headers: getHeaders(), body: JSON.stringify(data) })),
+  patch: async <T>(path: string, data?: unknown) => handleResponse<T>(await fetch(`${BASE}${path}`, { method: 'PATCH', headers: getHeaders(), body: JSON.stringify(data) })),
   delete: async <T>(path: string) => handleResponse<T>(await fetch(`${BASE}${path}`, { method: 'DELETE', headers: getHeaders() })),
 };
 
