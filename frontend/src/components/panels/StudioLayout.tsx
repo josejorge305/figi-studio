@@ -14,6 +14,7 @@ interface Message {
   content: string;
   created_at: string;
   changedFiles?: string[];
+  isStreaming?: boolean;
 }
 
 interface FileData {
