@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
 
@@ -22,6 +22,7 @@ function getFileIcon(path: string): string {
 export default function StudioPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -36,6 +37,7 @@ export default function StudioPage() {
   const [recentlyChanged, setRecentlyChanged] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const initialPromptSent = useRef(false);
 
   useEffect(() => {
     if (!projectId) return;
@@ -48,7 +50,6 @@ export default function StudioPage() {
         if (res.data.files.length > 0) {
           api.get<{ files: FileData[] }>(`/api/projects/${projectId}/files`).then(filesRes => {
             if (filesRes.success && filesRes.data) {
-              // Use index.html or build a basic preview from available files
               const indexFile = filesRes.data.files.find(f => f.path === 'index.html');
               if (indexFile?.content) {
                 setPreviewHtml(indexFile.content);
@@ -71,10 +72,11 @@ export default function StudioPage() {
     window.open(url, '_blank');
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || generating || !projectId) return;
-    const userMsg = input.trim();
-    setInput('');
+  // ── Core send function — accepts optional override message (for auto-send) ─
+  const handleSend = useCallback(async (overrideMessage?: string) => {
+    const userMsg = (overrideMessage || input).trim();
+    if (!userMsg || generating || !projectId) return;
+    if (!overrideMessage) setInput('');
     setGenerating(true);
     setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: userMsg, created_at: new Date().toISOString() }]);
 
@@ -82,7 +84,6 @@ export default function StudioPage() {
     if (res.success && res.data) {
       const changedPaths = (res.data.files || []).map(f => f.path);
 
-      // Add assistant message with list of changed files
       setMessages(prev => [...prev, {
         id: Date.now() + 1,
         role: 'assistant',
@@ -91,7 +92,6 @@ export default function StudioPage() {
         changedFiles: changedPaths,
       }]);
 
-      // Update file list — merge new/changed files
       if (changedPaths.length > 0) {
         setFiles(prev => {
           const updated = [...prev];
@@ -106,13 +106,10 @@ export default function StudioPage() {
           return updated;
         });
         setBottomTab('files');
-
-        // Highlight recently changed files (clear after 5s)
         setRecentlyChanged(new Set(changedPaths));
         setTimeout(() => setRecentlyChanged(new Set()), 5000);
       }
 
-      // Update preview with the combined HTML from all project files
       if (res.data.preview_html) {
         setPreviewHtml(res.data.preview_html);
         setPreviewKey(k => k + 1);
@@ -123,7 +120,25 @@ export default function StudioPage() {
     }
     setGenerating(false);
     inputRef.current?.focus();
-  };
+  }, [input, generating, projectId]);
+
+  // ── Task 1: Auto-send initial prompt passed from Dashboard ────────────────
+  useEffect(() => {
+    if (loading || !project || initialPromptSent.current) return;
+    const state = location.state as { initialPrompt?: string; designStylePrompt?: string } | null;
+    if (state?.initialPrompt) {
+      initialPromptSent.current = true;
+      // Clear location state so refresh/back doesn't re-trigger
+      window.history.replaceState({}, document.title);
+      // Build the message: prepend design style if selected
+      const designPrefix = state.designStylePrompt
+        ? `[DESIGN STYLE: ${state.designStylePrompt}]\n\n`
+        : '';
+      const fullMessage = designPrefix + state.initialPrompt;
+      // Small delay to ensure UI is rendered before auto-send
+      setTimeout(() => handleSend(fullMessage), 100);
+    }
+  }, [loading, project, location.state, handleSend]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -167,7 +182,7 @@ export default function StudioPage() {
         <div className="flex flex-col border-r" style={{ width: '42%', borderColor: 'rgba(71,85,105,0.3)' }}>
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.length === 0 && (
+            {messages.length === 0 && !generating && (
               <div className="h-full flex flex-col items-center justify-center text-center px-6">
                 <div className="text-5xl mb-4">🤖</div>
                 <h3 className="text-white font-bold mb-2">Professor Figi is ready</h3>
@@ -199,7 +214,6 @@ export default function StudioPage() {
                     }}>
                     {msg.content}
                   </div>
-                  {/* Files changed badge */}
                   {msg.changedFiles && msg.changedFiles.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {msg.changedFiles.map(path => (
@@ -240,7 +254,7 @@ export default function StudioPage() {
                 rows={2} disabled={generating}
                 className="flex-1 bg-transparent outline-none resize-none text-sm text-white/90 placeholder-white/30 leading-relaxed"
                 style={{ minHeight: 44, maxHeight: 120 }} />
-              <button onClick={handleSend} disabled={!input.trim() || generating}
+              <button onClick={() => handleSend()} disabled={!input.trim() || generating}
                 className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all text-white font-bold text-lg"
                 style={{ background: input.trim() && !generating ? '#FF8C42' : 'rgba(255,255,255,0.05)', cursor: input.trim() && !generating ? 'pointer' : 'not-allowed' }}>
                 ↑
