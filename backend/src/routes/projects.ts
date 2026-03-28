@@ -86,4 +86,24 @@ export const projectRoutes = {
     const { results } = await env.DB.prepare('SELECT * FROM messages WHERE project_id = ? ORDER BY created_at ASC').bind(req.params.id).all();
     return json({ success: true, data: { messages: results } });
   },
+
+  async preview(req: Request & { params: { id: string } }, env: Env): Promise<Response> {
+    // Serve the project's index.html directly as HTML — no auth required so iframe can load it
+    const file = await env.DB.prepare(
+      "SELECT content FROM files WHERE project_id = ? AND path = 'index.html'"
+    ).bind(req.params.id).first<{ content: string }>();
+
+    if (!file?.content) {
+      return new Response('<html><body style="background:#0b1120;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:Outfit,sans-serif"><p style="opacity:0.5">No preview available yet — start building!</p></body></html>', {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
+    }
+
+    return new Response(file.content, {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  },
 };

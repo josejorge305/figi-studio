@@ -129,22 +129,24 @@ export const generateRoutes = {
         `).bind(project.id, file.path, file.content, file.language || 'text').run();
       }
 
-      // Update project status and preview URL
-      const previewUrl = `https://${project.subdomain}.figistudio.dev`;
+      // Update project status
       await env.DB.prepare(
-        "UPDATE projects SET status = 'active', preview_url = ?, updated_at = datetime('now') WHERE id = ?"
-      ).bind(previewUrl, project.id).run();
+        "UPDATE projects SET status = 'active', updated_at = datetime('now') WHERE id = ?"
+      ).bind(project.id).run();
 
       // Save assistant message
       await env.DB.prepare('INSERT INTO messages (project_id, role, content) VALUES (?, ?, ?)')
         .bind(project.id, 'assistant', parsed.message).run();
+
+      // Find index.html content for instant srcdoc preview
+      const indexFile = (parsed.files || []).find(f => f.path === 'index.html');
 
       return json({
         success: true,
         data: {
           message: parsed.message,
           files: parsed.files || [],
-          preview_url: previewUrl,
+          preview_html: indexFile?.content || null,
           preview_ready: parsed.preview_ready || false,
         }
       });

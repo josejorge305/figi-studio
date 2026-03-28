@@ -39,6 +39,7 @@ router.get('/api/projects/:id', (req, env) => projectRoutes.get(req, env));
 router.delete('/api/projects/:id', (req, env) => projectRoutes.delete(req, env));
 router.get('/api/projects/:id/files', (req, env) => projectRoutes.getFiles(req, env));
 router.get('/api/projects/:id/messages', (req, env) => projectRoutes.getMessages(req, env));
+router.get('/api/projects/:id/preview', (req, env) => projectRoutes.preview(req, env));
 
 // AI generation
 router.post('/api/projects/:id/generate', (req, env) => generateRoutes.generate(req, env));

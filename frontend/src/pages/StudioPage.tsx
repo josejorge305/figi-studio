@@ -4,8 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
 
 interface Message { id: number; role: 'user' | 'assistant'; content: string; created_at: string; }
-interface File { id: number; path: string; language: string; content?: string; updated_at: string; }
-interface Project { id: number; name: string; description: string; subdomain: string; preview_url: string; status: string; }
+interface FileData { id: number; path: string; language: string; content?: string; updated_at: string; }
+interface Project { id: number; name: string; description: string; subdomain: string; status: string; }
 
 type BottomTab = 'files' | 'history';
 
@@ -15,11 +15,11 @@ export default function StudioPage() {
   const { user, logout } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<FileData[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState('');
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
   const [bottomTab, setBottomTab] = useState<BottomTab>('files');
   const [toast, setToast] = useState('');
@@ -28,12 +28,20 @@ export default function StudioPage() {
 
   useEffect(() => {
     if (!projectId) return;
-    api.get<{ project: Project; messages: Message[]; files: File[] }>(`/api/projects/${projectId}`).then(res => {
+    api.get<{ project: Project; messages: Message[]; files: FileData[] }>(`/api/projects/${projectId}`).then(res => {
       if (res.success && res.data) {
         setProject(res.data.project);
         setMessages(res.data.messages);
         setFiles(res.data.files);
-        if (res.data.project.preview_url) setPreviewUrl(res.data.project.preview_url);
+        // Load existing index.html for preview if project has files
+        if (res.data.files.length > 0) {
+          api.get<{ files: FileData[] }>(`/api/projects/${projectId}/files`).then(filesRes => {
+            if (filesRes.success && filesRes.data) {
+              const indexFile = filesRes.data.files.find(f => f.path === 'index.html');
+              if (indexFile?.content) setPreviewHtml(indexFile.content);
+            }
+          });
+        }
       } else navigate('/dashboard');
     }).finally(() => setLoading(false));
   }, [projectId]);
@@ -42,6 +50,13 @@ export default function StudioPage() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
+  const openInNewTab = () => {
+    if (!previewHtml) return;
+    const blob = new Blob([previewHtml], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  };
+
   const handleSend = async () => {
     if (!input.trim() || generating || !projectId) return;
     const userMsg = input.trim();
@@ -49,7 +64,7 @@ export default function StudioPage() {
     setGenerating(true);
     setMessages(prev => [...prev, { id: Date.now(), role: 'user', content: userMsg, created_at: new Date().toISOString() }]);
 
-    const res = await api.post<{ message: string; files: File[]; preview_url: string; preview_ready: boolean }>(`/api/projects/${projectId}/generate`, { message: userMsg });
+    const res = await api.post<{ message: string; files: FileData[]; preview_html: string | null; preview_ready: boolean }>(`/api/projects/${projectId}/generate`, { message: userMsg });
     if (res.success && res.data) {
       setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: res.data!.message, created_at: new Date().toISOString() }]);
       if (res.data.files?.length > 0) {
@@ -58,13 +73,17 @@ export default function StudioPage() {
           for (const f of res.data!.files) {
             const idx = updated.findIndex(x => x.path === f.path);
             if (idx >= 0) updated[idx] = { ...updated[idx], ...f };
-            else updated.push(f as File);
+            else updated.push(f as FileData);
           }
           return updated;
         });
         setBottomTab('files');
       }
-      if (res.data.preview_url) { setPreviewUrl(res.data.preview_url); setPreviewKey(k => k + 1); }
+      // Instant preview via srcdoc — no deployment needed
+      if (res.data.preview_html) {
+        setPreviewHtml(res.data.preview_html);
+        setPreviewKey(k => k + 1);
+      }
     } else {
       setMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: `Sorry, something went wrong: ${res.error}`, created_at: new Date().toISOString() }]);
     }
@@ -96,12 +115,12 @@ export default function StudioPage() {
           <span className="text-[10px] px-2 py-0.5 rounded-full text-green-400" style={{ background: 'rgba(74,222,128,0.1)' }}>● {project.status}</span>
         </div>
         <div className="flex items-center gap-3">
-          {previewUrl && (
-            <a href={previewUrl} target="_blank" rel="noopener noreferrer"
+          {previewHtml && (
+            <button onClick={openInNewTab}
               className="text-xs px-3 py-1.5 rounded-lg font-medium text-orange-400 transition-all"
               style={{ background: 'rgba(255,140,66,0.1)', border: '1px solid rgba(255,140,66,0.2)' }}>
               Open Live ↗
-            </a>
+            </button>
           )}
           <span className="text-white/30 text-xs">{user?.name}</span>
           <button onClick={logout} className="text-white/20 hover:text-white/50 text-xs transition-colors">Sign out</button>
@@ -122,7 +141,7 @@ export default function StudioPage() {
                   Describe what you want to build. I'll generate the code and explain what I made.
                 </p>
                 <div className="mt-6 space-y-2 w-full max-w-xs">
-                  {['Build a landing page for a SaaS product', 'Create a todo app with local storage', 'Make a REST API with user auth'].map(suggestion => (
+                  {['Build a landing page for a SaaS product', 'Create a todo app with React state', 'Make a weather dashboard UI'].map(suggestion => (
                     <button key={suggestion} onClick={() => { setInput(suggestion); inputRef.current?.focus(); }}
                       className="w-full text-left px-4 py-2.5 rounded-xl text-sm text-white/60 transition-all hover:text-white/80"
                       style={{ background: 'rgba(51,65,85,0.2)', border: '1px solid rgba(71,85,105,0.2)' }}>
@@ -187,15 +206,27 @@ export default function StudioPage() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Preview */}
           <div className="flex-1 relative" style={{ background: '#060810' }}>
-            {previewUrl ? (
+            {generating && !previewHtml && (
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center" style={{ background: 'rgba(6,8,16,0.85)' }}>
+                <div className="text-4xl mb-3 animate-pulse">🤖</div>
+                <p className="text-white/50 text-sm">Building your app...</p>
+              </div>
+            )}
+            {previewHtml ? (
               <>
                 <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
-                  <span className="text-[10px] text-white/30 font-mono">{previewUrl}</span>
+                  <span className="text-[10px] text-white/30 font-mono">preview</span>
                   <button onClick={() => setPreviewKey(k => k + 1)}
                     className="px-3 py-1 rounded-lg text-xs text-white/60 transition-all hover:text-white/90"
                     style={{ background: 'rgba(51,65,85,0.4)', border: '1px solid rgba(71,85,105,0.3)' }}>↻ Refresh</button>
                 </div>
-                <iframe key={previewKey} src={previewUrl} className="w-full h-full border-0" title="App Preview" sandbox="allow-scripts allow-same-origin allow-forms" />
+                <iframe
+                  key={previewKey}
+                  srcDoc={previewHtml}
+                  className="w-full h-full border-0"
+                  title="App Preview"
+                  sandbox="allow-scripts allow-modals allow-forms allow-popups"
+                />
               </>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-center px-8">
