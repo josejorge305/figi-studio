@@ -47,6 +47,9 @@ interface StudioLayoutProps {
   terminalLines: TerminalLine[];
   terminalLog: (type: TerminalLine['type'], message: string) => void;
   terminalClear: () => void;
+  deployedUrl: string | null;
+  deploying: boolean;
+  cfConnected: boolean;
   onInputChange: (value: string) => void;
   onSend: () => void;
   onSuggestionClick: (text: string) => void;
@@ -56,16 +59,19 @@ interface StudioLayoutProps {
   onLogout: () => void;
   onFileUpdated: (path: string, content: string) => void;
   onFilesChanged: () => void;
+  onDeployStart: () => void;
+  onDeployEnd: (url: string | null) => void;
+  onDeploy: () => void;
 }
 
 export default function StudioLayout({
   project, messages, files, fileContents, input, generating,
   previewHtml, previewKey, recentlyChanged, userName, projectId,
   terminalLines, terminalLog, terminalClear,
+  deployedUrl, deploying, cfConnected,
   onInputChange, onSend, onSuggestionClick, onRefreshPreview, onOpenLive, onBack, onLogout,
-  onFileUpdated, onFilesChanged,
+  onFileUpdated, onFilesChanged, onDeployStart, onDeployEnd, onDeploy,
 }: StudioLayoutProps) {
-  // Layout state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [activeBottomTab, setActiveBottomTab] = useState<BottomTab>('editor');
@@ -75,12 +81,9 @@ export default function StudioLayout({
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
 
-  // Resize refs
   const resizingRef = useRef<'sidebar' | 'chat' | 'bottom' | null>(null);
   const resizeStartRef = useRef({ x: 0, y: 0, value: 0 });
   const mainAreaRef = useRef<HTMLDivElement>(null);
-
-  // Responsive
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
@@ -94,7 +97,6 @@ export default function StudioLayout({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // File selection handler
   const handleFileSelect = useCallback((path: string) => {
     setSelectedFile(path);
     setOpenFiles(prev => prev.includes(path) ? prev : [...prev, path]);
@@ -112,22 +114,16 @@ export default function StudioLayout({
     });
   }, [selectedFile]);
 
-  // Resize handlers
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!resizingRef.current) return;
-
     if (resizingRef.current === 'sidebar') {
-      const newWidth = Math.min(400, Math.max(200, resizeStartRef.current.value + (e.clientX - resizeStartRef.current.x)));
-      setSidebarWidth(newWidth);
+      setSidebarWidth(Math.min(400, Math.max(200, resizeStartRef.current.value + (e.clientX - resizeStartRef.current.x))));
     } else if (resizingRef.current === 'chat' && mainAreaRef.current) {
       const rect = mainAreaRef.current.getBoundingClientRect();
-      const pct = ((e.clientX - rect.left) / rect.width) * 100;
-      setChatWidthPercent(Math.min(70, Math.max(30, pct)));
+      setChatWidthPercent(Math.min(70, Math.max(30, ((e.clientX - rect.left) / rect.width) * 100)));
     } else if (resizingRef.current === 'bottom' && mainAreaRef.current) {
       const rect = mainAreaRef.current.getBoundingClientRect();
-      const newHeight = rect.bottom - e.clientY;
-      const maxHeight = rect.height * 0.6;
-      setBottomPanelHeight(Math.min(maxHeight, Math.max(36, newHeight)));
+      setBottomPanelHeight(Math.min(rect.height * 0.6, Math.max(36, rect.bottom - e.clientY)));
     }
   }, []);
 
@@ -135,27 +131,19 @@ export default function StudioLayout({
     resizingRef.current = null;
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
-    const blocker = document.getElementById('resize-overlay');
-    if (blocker) blocker.remove();
+    document.getElementById('resize-overlay')?.remove();
   }, []);
 
   useEffect(() => {
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
+    return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
   }, [handleMouseMove, handleMouseUp]);
 
   const startResize = (type: 'sidebar' | 'chat' | 'bottom', e: React.MouseEvent) => {
     e.preventDefault();
     resizingRef.current = type;
-    resizeStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      value: type === 'sidebar' ? sidebarWidth : type === 'bottom' ? bottomPanelHeight : chatWidthPercent,
-    };
+    resizeStartRef.current = { x: e.clientX, y: e.clientY, value: type === 'sidebar' ? sidebarWidth : type === 'bottom' ? bottomPanelHeight : chatWidthPercent };
     document.body.style.cursor = type === 'bottom' ? 'row-resize' : 'col-resize';
     document.body.style.userSelect = 'none';
     const overlay = document.createElement('div');
@@ -166,20 +154,21 @@ export default function StudioLayout({
 
   return (
     <div className="h-screen flex flex-col" style={{ background: 'var(--bg-primary)' }}>
-      {/* Top bar */}
       <TopBar
         projectName={project.name}
         projectStatus={project.status}
         userName={userName}
         previewHtml={previewHtml}
+        deployedUrl={deployedUrl}
+        deploying={deploying}
+        cfConnected={cfConnected}
         onBack={onBack}
         onOpenLive={onOpenLive}
         onLogout={onLogout}
+        onDeploy={onDeploy}
       />
 
-      {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left sidebar */}
         {!isMobile || !sidebarCollapsed ? (
           <LeftSidebar
             collapsed={sidebarCollapsed || isMobile}
@@ -192,66 +181,40 @@ export default function StudioLayout({
             onResizeStart={(e) => startResize('sidebar', e)}
             projectId={projectId}
             onFilesChanged={onFilesChanged}
+            terminalLog={terminalLog}
+            onDeployStart={onDeployStart}
+            onDeployEnd={onDeployEnd}
           />
         ) : null}
 
-        {/* Center: Chat + Preview + Bottom Panel */}
         <div ref={mainAreaRef} className="flex-1 flex flex-col overflow-hidden">
-          {/* Top section: Chat + Preview */}
           <div className={`flex-1 flex overflow-hidden ${isMobile ? 'flex-col' : ''}`}>
-            {/* Chat */}
             <div style={{ width: isMobile ? '100%' : `${chatWidthPercent}%`, height: isMobile ? '50%' : '100%' }}>
-              <ChatPanel
-                messages={messages}
-                input={input}
-                generating={generating}
-                onInputChange={onInputChange}
-                onSend={onSend}
-                onSuggestionClick={onSuggestionClick}
-              />
+              <ChatPanel messages={messages} input={input} generating={generating}
+                onInputChange={onInputChange} onSend={onSend} onSuggestionClick={onSuggestionClick} />
             </div>
-
-            {/* Chat/Preview resize handle */}
             {!isMobile && (
-              <div
-                onMouseDown={(e) => startResize('chat', e)}
-                className="w-1 shrink-0 cursor-col-resize"
-                style={{ background: 'transparent' }}
+              <div onMouseDown={(e) => startResize('chat', e)}
+                className="w-1 shrink-0 cursor-col-resize" style={{ background: 'transparent' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-orange)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-              />
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'} />
             )}
-
-            {/* Preview */}
             <div className="flex-1" style={{ height: isMobile ? '50%' : '100%' }}>
-              <PreviewPanel
-                previewHtml={previewHtml}
-                previewKey={previewKey}
-                generating={generating}
-                onRefresh={onRefreshPreview}
-                onOpenLive={onOpenLive}
-              />
+              <PreviewPanel previewHtml={previewHtml} previewKey={previewKey} generating={generating}
+                onRefresh={onRefreshPreview} onOpenLive={onOpenLive} />
             </div>
           </div>
 
-          {/* Bottom panel */}
           <BottomPanel
-            activeTab={activeBottomTab}
-            onTabChange={setActiveBottomTab}
+            activeTab={activeBottomTab} onTabChange={setActiveBottomTab}
             collapsed={bottomPanelCollapsed || isMobile}
             onToggleCollapse={() => setBottomPanelCollapsed(!bottomPanelCollapsed)}
-            height={bottomPanelHeight}
-            onResizeStart={(e) => startResize('bottom', e)}
-            openFiles={openFiles}
-            selectedFile={selectedFile}
-            files={files}
-            fileContents={fileContents}
-            projectId={projectId}
-            onFileSelect={handleFileSelect}
-            onFileClose={handleFileClose}
+            height={bottomPanelHeight} onResizeStart={(e) => startResize('bottom', e)}
+            openFiles={openFiles} selectedFile={selectedFile}
+            files={files} fileContents={fileContents} projectId={projectId}
+            onFileSelect={handleFileSelect} onFileClose={handleFileClose}
             onFileUpdated={onFileUpdated}
-            terminalLines={terminalLines}
-            terminalClear={terminalClear}
+            terminalLines={terminalLines} terminalClear={terminalClear}
           />
         </div>
       </div>

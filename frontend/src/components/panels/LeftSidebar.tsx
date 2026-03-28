@@ -21,9 +21,16 @@ interface LeftSidebarProps {
   onResizeStart: (e: React.MouseEvent) => void;
   projectId: string;
   onFilesChanged: () => void;
+  terminalLog: (type: 'info' | 'success' | 'error' | 'warning' | 'system' | 'command' | 'ai', message: string) => void;
+  onDeployStart: () => void;
+  onDeployEnd: (url: string | null) => void;
 }
 
-export default function LeftSidebar({ collapsed, onToggle, files, selectedFile, recentlyChanged, onFileSelect, width, onResizeStart, projectId, onFilesChanged }: LeftSidebarProps) {
+export default function LeftSidebar({
+  collapsed, onToggle, files, selectedFile, recentlyChanged, onFileSelect,
+  width, onResizeStart, projectId, onFilesChanged,
+  terminalLog, onDeployStart, onDeployEnd,
+}: LeftSidebarProps) {
   return (
     <div className="relative shrink-0 flex" style={{ width: collapsed ? 48 : width }}>
       <div className="flex-1 flex flex-col overflow-hidden"
@@ -40,7 +47,6 @@ export default function LeftSidebar({ collapsed, onToggle, files, selectedFile, 
         </button>
 
         {collapsed ? (
-          /* Icon rail */
           <div className="flex flex-col items-center gap-1 pt-2">
             <button onClick={onToggle} className="w-9 h-9 flex items-center justify-center rounded-lg transition-colors" title="Files"
               style={{ color: 'var(--text-muted)' }}
@@ -62,7 +68,6 @@ export default function LeftSidebar({ collapsed, onToggle, files, selectedFile, 
             </button>
           </div>
         ) : (
-          /* Full sidebar content */
           <div className="flex-1 overflow-y-auto">
             <FileExplorer
               files={files}
@@ -72,13 +77,17 @@ export default function LeftSidebar({ collapsed, onToggle, files, selectedFile, 
               projectId={projectId}
               onFilesChanged={onFilesChanged}
             />
-            <GitPanel />
-            <CloudflarePanel />
+            <GitPanel projectId={projectId} terminalLog={terminalLog} />
+            <CloudflarePanel
+              projectId={projectId}
+              terminalLog={terminalLog}
+              onDeployStart={onDeployStart}
+              onDeployEnd={onDeployEnd}
+            />
           </div>
         )}
       </div>
 
-      {/* Resize handle */}
       {!collapsed && (
         <div
           onMouseDown={onResizeStart}

@@ -27,6 +27,11 @@ export default function StudioPage() {
   const [recentlyChanged, setRecentlyChanged] = useState<Set<string>>(new Set());
   const initialPromptSent = useRef(false);
 
+  // Deploy state
+  const [deployedUrl, setDeployedUrl] = useState<string | null>(null);
+  const [deploying, setDeploying] = useState(false);
+  const [cfConnected, setCfConnected] = useState(false);
+
   const { lines: terminalLines, log: terminalLog, clear: terminalClear } = useTerminal();
 
   // Load project data
@@ -55,17 +60,30 @@ export default function StudioPage() {
         }
       } else navigate('/dashboard');
     }).finally(() => setLoading(false));
+
+    // Check CF connection status
+    api.get<{ connected: boolean }>('/api/cloudflare/status').then(res => {
+      if (res.success && res.data) setCfConnected(res.data.connected);
+    });
+
+    // Check for existing deployments
+    api.get<{ deployments: Array<{ deployment_url: string; status: string }> }>(`/api/projects/${projectId}/deployments`).then(res => {
+      if (res.success && res.data) {
+        const latest = res.data.deployments.find(d => d.status === 'success');
+        if (latest) setDeployedUrl(latest.deployment_url);
+      }
+    });
   }, [projectId]);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const openInNewTab = () => {
+    if (deployedUrl) { window.open(deployedUrl, '_blank'); return; }
     if (!previewHtml) return;
     const blob = new Blob([previewHtml], { type: 'text/html' });
     window.open(URL.createObjectURL(blob), '_blank');
   };
 
-  // Re-fetch all files from API and update state
   const refreshFiles = useCallback(async () => {
     if (!projectId) return;
     const res = await api.get<{ files: FileData[] }>(`/api/projects/${projectId}/files`);
@@ -84,30 +102,56 @@ export default function StudioPage() {
     }
   }, [projectId]);
 
-  // Called when a file is saved in the editor
   const handleFileUpdated = useCallback((path: string, content: string) => {
     setFileContents(prev => ({ ...prev, [path]: content }));
     terminalLog('success', `💾 Saved: ${path}`);
     if (path === 'index.html') {
       setPreviewHtml(content);
-      setPreviewKey(k => k + 1);
-      terminalLog('info', 'Preview refreshed.');
-    } else {
-      setPreviewKey(k => k + 1);
-      terminalLog('info', 'Preview refreshed.');
     }
+    setPreviewKey(k => k + 1);
+    terminalLog('info', 'Preview refreshed.');
     showToast(`Saved ${path.split('/').pop()}`);
   }, [terminalLog]);
 
-  // Called when files are created/deleted/renamed via explorer
   const handleFilesChanged = useCallback(async () => {
     await refreshFiles();
   }, [refreshFiles]);
 
-  // Terminal-aware log for file CRUD from explorer
   const handleTerminalLog = useCallback((type: 'info' | 'success' | 'error' | 'warning' | 'system' | 'command' | 'ai', message: string) => {
     terminalLog(type, message);
   }, [terminalLog]);
+
+  // Deploy handlers
+  const handleDeployStart = useCallback(() => {
+    setDeploying(true);
+  }, []);
+
+  const handleDeployEnd = useCallback((url: string | null) => {
+    setDeploying(false);
+    if (url) {
+      setDeployedUrl(url);
+      setCfConnected(true);
+      showToast(`Deployed to ${url}`);
+    }
+  }, []);
+
+  const handleTopBarDeploy = useCallback(async () => {
+    if (!cfConnected || !projectId) {
+      terminalLog('warning', 'Connect Cloudflare in the Deploy panel first');
+      return;
+    }
+    setDeploying(true);
+    terminalLog('command', '> Deploying to Cloudflare Pages...');
+    const res = await api.post<{ url: string }>(`/api/projects/${projectId}/deploy`);
+    if (res.success && res.data) {
+      terminalLog('success', `Deployed to ${res.data.url}`);
+      setDeployedUrl(res.data.url);
+      showToast(`Deployed to ${res.data.url}`);
+    } else {
+      terminalLog('error', `Deploy failed: ${res.error}`);
+    }
+    setDeploying(false);
+  }, [cfConnected, projectId, terminalLog]);
 
   const handleSend = useCallback(async (overrideMessage?: string) => {
     const userMsg = (overrideMessage || input).trim();
@@ -173,7 +217,6 @@ export default function StudioPage() {
     setGenerating(false);
   }, [input, generating, projectId, terminalLog]);
 
-  // Auto-send initial prompt from Dashboard
   useEffect(() => {
     if (loading || !project || initialPromptSent.current) return;
     const state = location.state as { initialPrompt?: string; designStylePrompt?: string } | null;
@@ -185,7 +228,6 @@ export default function StudioPage() {
     }
   }, [loading, project, location.state, handleSend]);
 
-  // Listen for preview errors from iframe
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
       if (event.data?.type === 'preview-error') {
@@ -221,6 +263,9 @@ export default function StudioPage() {
         terminalLines={terminalLines}
         terminalLog={handleTerminalLog}
         terminalClear={terminalClear}
+        deployedUrl={deployedUrl}
+        deploying={deploying}
+        cfConnected={cfConnected}
         onInputChange={setInput}
         onSend={() => handleSend()}
         onSuggestionClick={setInput}
@@ -230,8 +275,10 @@ export default function StudioPage() {
         onLogout={logout}
         onFileUpdated={handleFileUpdated}
         onFilesChanged={handleFilesChanged}
+        onDeployStart={handleDeployStart}
+        onDeployEnd={handleDeployEnd}
+        onDeploy={handleTopBarDeploy}
       />
-      {/* Toast */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-5 py-2.5 rounded-xl text-sm font-medium text-white animate-fade-in z-50"
           style={{ background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.3)' }}>

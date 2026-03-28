@@ -2,6 +2,8 @@ import { AutoRouter, cors, error, json } from 'itty-router';
 import { authRoutes } from './routes/auth';
 import { projectRoutes } from './routes/projects';
 import { generateRoutes } from './routes/generate';
+import { githubRoutes } from './routes/github';
+import { cloudflareRoutes } from './routes/cloudflare';
 
 export interface Env {
   DB: D1Database;
@@ -11,6 +13,8 @@ export interface Env {
   APP_DOMAIN: string;
   CLOUDFLARE_API_TOKEN: string;
   CLOUDFLARE_ACCOUNT_ID: string;
+  GITHUB_CLIENT_ID: string;
+  GITHUB_CLIENT_SECRET: string;
 }
 
 const ALLOWED_ORIGINS = [
@@ -57,6 +61,22 @@ router.delete('/api/projects/:id/files/:fileId', (req, env) => projectRoutes.del
 
 // AI generation
 router.post('/api/projects/:id/generate', (req, env) => generateRoutes.generate(req, env));
+
+// GitHub routes
+router.get('/api/github/auth-url', (req, env) => githubRoutes.authUrl(req, env));
+router.post('/api/github/callback', (req, env) => githubRoutes.callback(req, env));
+router.get('/api/github/status', (req, env) => githubRoutes.status(req, env));
+router.delete('/api/github/disconnect', (req, env) => githubRoutes.disconnect(req, env));
+router.post('/api/projects/:id/github/init', (req, env) => githubRoutes.initRepo(req, env));
+router.post('/api/projects/:id/github/commit', (req, env) => githubRoutes.commitAndPush(req, env));
+router.get('/api/projects/:id/github/status', (req, env) => githubRoutes.repoStatus(req, env));
+
+// Cloudflare routes
+router.post('/api/cloudflare/connect', (req, env) => cloudflareRoutes.connect(req, env));
+router.get('/api/cloudflare/status', (req, env) => cloudflareRoutes.status(req, env));
+router.delete('/api/cloudflare/disconnect', (req, env) => cloudflareRoutes.disconnect(req, env));
+router.post('/api/projects/:id/deploy', (req, env) => cloudflareRoutes.deploy(req, env));
+router.get('/api/projects/:id/deployments', (req, env) => cloudflareRoutes.deployments(req, env));
 
 // 404
 router.all('*', () => error(404, 'Not found'));
