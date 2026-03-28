@@ -23,7 +23,7 @@ const ALLOWED_ORIGINS = [
 
 const { preflight, corsify } = cors({
   origin: (origin: string) => ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
-  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
 });
 
@@ -48,6 +48,12 @@ router.delete('/api/projects/:id', (req, env) => projectRoutes.delete(req, env))
 router.get('/api/projects/:id/files', (req, env) => projectRoutes.getFiles(req, env));
 router.get('/api/projects/:id/messages', (req, env) => projectRoutes.getMessages(req, env));
 router.get('/api/projects/:id/preview', (req, env) => projectRoutes.preview(req, env));
+
+// File CRUD routes
+router.post('/api/projects/:id/files', (req, env) => projectRoutes.createFile(req, env));
+router.put('/api/projects/:id/files/:fileId', (req, env) => projectRoutes.updateFile(req, env));
+router.patch('/api/projects/:id/files/:fileId', (req, env) => projectRoutes.renameFile(req, env));
+router.delete('/api/projects/:id/files/:fileId', (req, env) => projectRoutes.deleteFile(req, env));
 
 // AI generation
 router.post('/api/projects/:id/generate', (req, env) => generateRoutes.generate(req, env));

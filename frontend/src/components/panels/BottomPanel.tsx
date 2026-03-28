@@ -1,4 +1,3 @@
-import { useRef, useCallback } from 'react';
 import EditorPanel from './EditorPanel';
 import AnatomyPanel from './AnatomyPanel';
 import TerminalPanel from './TerminalPanel';
@@ -21,13 +20,14 @@ interface BottomPanelProps {
   onToggleCollapse: () => void;
   height: number;
   onResizeStart: (e: React.MouseEvent) => void;
-  // Editor props
   openFiles: string[];
   selectedFile: string | null;
   files: FileData[];
   fileContents: Record<string, string>;
+  projectId: string;
   onFileSelect: (path: string) => void;
   onFileClose: (path: string) => void;
+  onFileUpdated: (path: string, content: string) => void;
 }
 
 const TABS: { key: BottomTab; icon: string; label: string }[] = [
@@ -39,7 +39,7 @@ const TABS: { key: BottomTab; icon: string; label: string }[] = [
 
 export default function BottomPanel({
   activeTab, onTabChange, collapsed, onToggleCollapse, height, onResizeStart,
-  openFiles, selectedFile, files, fileContents, onFileSelect, onFileClose,
+  openFiles, selectedFile, files, fileContents, projectId, onFileSelect, onFileClose, onFileUpdated,
 }: BottomPanelProps) {
   const tabBarHeight = 36;
 
@@ -87,9 +87,16 @@ export default function BottomPanel({
       {!collapsed && (
         <div className="flex-1 overflow-hidden">
           {activeTab === 'editor' && (
-            <EditorPanel openFiles={openFiles} selectedFile={selectedFile}
-              files={files} fileContents={fileContents}
-              onFileSelect={onFileSelect} onFileClose={onFileClose} />
+            <EditorPanel
+              openFiles={openFiles}
+              selectedFile={selectedFile}
+              files={files}
+              fileContents={fileContents}
+              projectId={projectId}
+              onFileSelect={onFileSelect}
+              onFileClose={onFileClose}
+              onFileUpdated={onFileUpdated}
+            />
           )}
           {activeTab === 'anatomy' && <AnatomyPanel files={files} />}
           {activeTab === 'terminal' && <TerminalPanel />}

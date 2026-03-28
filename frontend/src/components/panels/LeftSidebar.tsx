@@ -19,9 +19,11 @@ interface LeftSidebarProps {
   onFileSelect: (path: string) => void;
   width: number;
   onResizeStart: (e: React.MouseEvent) => void;
+  projectId: string;
+  onFilesChanged: () => void;
 }
 
-export default function LeftSidebar({ collapsed, onToggle, files, selectedFile, recentlyChanged, onFileSelect, width, onResizeStart }: LeftSidebarProps) {
+export default function LeftSidebar({ collapsed, onToggle, files, selectedFile, recentlyChanged, onFileSelect, width, onResizeStart, projectId, onFilesChanged }: LeftSidebarProps) {
   return (
     <div className="relative shrink-0 flex" style={{ width: collapsed ? 48 : width }}>
       <div className="flex-1 flex flex-col overflow-hidden"
@@ -62,8 +64,14 @@ export default function LeftSidebar({ collapsed, onToggle, files, selectedFile, 
         ) : (
           /* Full sidebar content */
           <div className="flex-1 overflow-y-auto">
-            <FileExplorer files={files} selectedFile={selectedFile}
-              recentlyChanged={recentlyChanged} onFileSelect={onFileSelect} />
+            <FileExplorer
+              files={files}
+              selectedFile={selectedFile}
+              recentlyChanged={recentlyChanged}
+              onFileSelect={onFileSelect}
+              projectId={projectId}
+              onFilesChanged={onFilesChanged}
+            />
             <GitPanel />
             <CloudflarePanel />
           </div>

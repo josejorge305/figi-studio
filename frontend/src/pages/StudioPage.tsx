@@ -39,12 +39,12 @@ export default function StudioPage() {
             if (filesRes.success && filesRes.data) {
               const indexFile = filesRes.data.files.find(f => f.path === 'index.html');
               if (indexFile?.content) setPreviewHtml(indexFile.content);
-              // Store file contents for editor
               const contents: Record<string, string> = {};
               for (const f of filesRes.data.files) {
                 if (f.content) contents[f.path] = f.content;
               }
               setFileContents(contents);
+              setFiles(filesRes.data.files);
             }
           });
         }
@@ -59,6 +59,41 @@ export default function StudioPage() {
     const blob = new Blob([previewHtml], { type: 'text/html' });
     window.open(URL.createObjectURL(blob), '_blank');
   };
+
+  // Re-fetch all files from API and update state
+  const refreshFiles = useCallback(async () => {
+    if (!projectId) return;
+    const res = await api.get<{ files: FileData[] }>(`/api/projects/${projectId}/files`);
+    if (res.success && res.data) {
+      setFiles(res.data.files);
+      const contents: Record<string, string> = {};
+      for (const f of res.data.files) {
+        if (f.content) contents[f.path] = f.content;
+      }
+      setFileContents(contents);
+      // Rebuild preview from latest index.html
+      const indexFile = res.data.files.find(f => f.path === 'index.html');
+      if (indexFile?.content) {
+        setPreviewHtml(indexFile.content);
+        setPreviewKey(k => k + 1);
+      }
+    }
+  }, [projectId]);
+
+  // Called when a file is saved in the editor
+  const handleFileUpdated = useCallback((path: string, content: string) => {
+    setFileContents(prev => ({ ...prev, [path]: content }));
+    // If the saved file is index.html, refresh preview
+    if (path === 'index.html') {
+      setPreviewHtml(content);
+      setPreviewKey(k => k + 1);
+    } else {
+      // For non-index files, rebuild preview by re-fetching to get any CSS/JS changes
+      // reflected through the server-rendered preview
+      setPreviewKey(k => k + 1);
+    }
+    showToast(`Saved ${path.split('/').pop()}`);
+  }, []);
 
   const handleSend = useCallback(async (overrideMessage?: string) => {
     const userMsg = (overrideMessage || input).trim();
@@ -100,6 +135,7 @@ export default function StudioPage() {
               if (f.content) contents[f.path] = f.content;
             }
             setFileContents(contents);
+            setFiles(filesRes.data.files);
           }
         });
       }
@@ -148,6 +184,7 @@ export default function StudioPage() {
         previewKey={previewKey}
         recentlyChanged={recentlyChanged}
         userName={user?.name}
+        projectId={projectId || ''}
         onInputChange={setInput}
         onSend={() => handleSend()}
         onSuggestionClick={setInput}
@@ -155,6 +192,8 @@ export default function StudioPage() {
         onOpenLive={openInNewTab}
         onBack={() => navigate('/dashboard')}
         onLogout={logout}
+        onFileUpdated={handleFileUpdated}
+        onFilesChanged={refreshFiles}
       />
       {/* Toast */}
       {toast && (

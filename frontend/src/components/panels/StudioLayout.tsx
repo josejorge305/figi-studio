@@ -42,6 +42,7 @@ interface StudioLayoutProps {
   previewKey: number;
   recentlyChanged: Set<string>;
   userName?: string;
+  projectId: string;
   onInputChange: (value: string) => void;
   onSend: () => void;
   onSuggestionClick: (text: string) => void;
@@ -49,12 +50,15 @@ interface StudioLayoutProps {
   onOpenLive: () => void;
   onBack: () => void;
   onLogout: () => void;
+  onFileUpdated: (path: string, content: string) => void;
+  onFilesChanged: () => void;
 }
 
 export default function StudioLayout({
   project, messages, files, fileContents, input, generating,
-  previewHtml, previewKey, recentlyChanged, userName,
+  previewHtml, previewKey, recentlyChanged, userName, projectId,
   onInputChange, onSend, onSuggestionClick, onRefreshPreview, onOpenLive, onBack, onLogout,
+  onFileUpdated, onFilesChanged,
 }: StudioLayoutProps) {
   // Layout state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -129,7 +133,6 @@ export default function StudioLayout({
     resizingRef.current = null;
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
-    // Remove the overlay iframe blocker
     const blocker = document.getElementById('resize-overlay');
     if (blocker) blocker.remove();
   }, []);
@@ -153,7 +156,6 @@ export default function StudioLayout({
     };
     document.body.style.cursor = type === 'bottom' ? 'row-resize' : 'col-resize';
     document.body.style.userSelect = 'none';
-    // Add overlay to prevent iframe from stealing mouse events
     const overlay = document.createElement('div');
     overlay.id = 'resize-overlay';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:inherit;';
@@ -186,6 +188,8 @@ export default function StudioLayout({
             onFileSelect={handleFileSelect}
             width={sidebarWidth}
             onResizeStart={(e) => startResize('sidebar', e)}
+            projectId={projectId}
+            onFilesChanged={onFilesChanged}
           />
         ) : null}
 
@@ -240,8 +244,10 @@ export default function StudioLayout({
             selectedFile={selectedFile}
             files={files}
             fileContents={fileContents}
+            projectId={projectId}
             onFileSelect={handleFileSelect}
             onFileClose={handleFileClose}
+            onFileUpdated={onFileUpdated}
           />
         </div>
       </div>
