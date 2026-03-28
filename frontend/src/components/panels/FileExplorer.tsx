@@ -17,6 +17,7 @@ interface FileExplorerProps {
   onFileSelect: (path: string) => void;
   projectId: string;
   onFilesChanged: () => void;
+  onExplainFile?: (path: string) => void;
 }
 
 const FILE_ICONS: Record<string, string> = {
@@ -71,7 +72,7 @@ function buildTree(files: FileData[]): TreeNode[] {
 }
 
 // Context menu component
-function ContextMenu({ x, y, node, projectId, onFilesChanged, onFileSelect, onClose }: {
+function ContextMenu({ x, y, node, projectId, onFilesChanged, onFileSelect, onClose, onExplainFile }: {
   x: number;
   y: number;
   node: TreeNode | null; // null = root level
@@ -79,6 +80,7 @@ function ContextMenu({ x, y, node, projectId, onFilesChanged, onFileSelect, onCl
   onFilesChanged: () => void;
   onFileSelect: (path: string) => void;
   onClose: () => void;
+  onExplainFile?: (path: string) => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [showNewFileInput, setShowNewFileInput] = useState(false);
@@ -219,6 +221,9 @@ function ContextMenu({ x, y, node, projectId, onFilesChanged, onFileSelect, onCl
       {isFile && (
         <MenuItem label="Open in Editor" onClick={() => { onFileSelect(node.path); onClose(); }} />
       )}
+      {isFile && onExplainFile && (
+        <MenuItem label="🎓 Explain This File" onClick={() => { onExplainFile(node.path); onClose(); }} />
+      )}
       <MenuItem label="New File..." onClick={() => setShowNewFileInput(true)} />
       {isFile && (
         <MenuItem label="Rename..." onClick={() => { setInputValue(node.name); setShowRenameInput(true); }} />
@@ -339,7 +344,7 @@ function TreeItem({ node, depth, selectedFile, recentlyChanged, onFileSelect, ex
   );
 }
 
-export default function FileExplorer({ files, selectedFile, recentlyChanged, onFileSelect, projectId, onFilesChanged }: FileExplorerProps) {
+export default function FileExplorer({ files, selectedFile, recentlyChanged, onFileSelect, projectId, onFilesChanged, onExplainFile }: FileExplorerProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: TreeNode | null } | null>(null);
@@ -416,6 +421,7 @@ export default function FileExplorer({ files, selectedFile, recentlyChanged, onF
           onFilesChanged={onFilesChanged}
           onFileSelect={onFileSelect}
           onClose={() => setContextMenu(null)}
+          onExplainFile={onExplainFile}
         />
       )}
     </div>

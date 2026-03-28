@@ -5,10 +5,11 @@ import type { ErrorMapping } from '../../data/curriculumMap';
 interface ErrorBridgeProps {
   errorMessage: string | null;
   onFixIt: (errorMessage: string) => void;
+  onExplainError: (errorMessage: string) => void;
   onDismiss: () => void;
 }
 
-export default function ErrorBridge({ errorMessage, onFixIt, onDismiss }: ErrorBridgeProps) {
+export default function ErrorBridge({ errorMessage, onFixIt, onExplainError, onDismiss }: ErrorBridgeProps) {
   const [mapping, setMapping] = useState<ErrorMapping | null>(null);
   const [visible, setVisible] = useState(false);
 
@@ -38,7 +39,7 @@ export default function ErrorBridge({ errorMessage, onFixIt, onDismiss }: ErrorB
         bottom: 60,
         left: '50%',
         transform: 'translateX(-50%)',
-        maxWidth: 560,
+        maxWidth: 620,
         width: 'calc(100% - 32px)',
         background: '#1a1d27',
         borderLeft: '4px solid #ef4444',
@@ -74,26 +75,39 @@ export default function ErrorBridge({ errorMessage, onFixIt, onDismiss }: ErrorB
         </div>
       )}
 
-      {/* Action buttons */}
-      <div className="flex items-center gap-2 pl-5">
+      {/* Action buttons — 3 buttons: Fix It, Explain This Error, Deep Dive */}
+      <div className="flex items-center gap-2 pl-5 flex-wrap">
+        {/* Fix It (orange) — debug mode */}
         <button
           onClick={() => { onFixIt(errorMessage); setVisible(false); onDismiss(); }}
           className="text-[11px] px-3 py-1 rounded transition-colors"
           style={{ background: 'rgba(249,115,22,0.15)', color: '#f97316', border: '1px solid rgba(249,115,22,0.3)', cursor: 'pointer' }}
           onMouseEnter={e => e.currentTarget.style.background = 'rgba(249,115,22,0.25)'}
           onMouseLeave={e => e.currentTarget.style.background = 'rgba(249,115,22,0.15)'}>
-          🔧 Ask Figi to Fix
+          🔧 Fix It
         </button>
+
+        {/* Explain This Error (purple) — learn mode */}
+        <button
+          onClick={() => { onExplainError(errorMessage); setVisible(false); onDismiss(); }}
+          className="text-[11px] px-3 py-1 rounded transition-colors"
+          style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.3)', cursor: 'pointer' }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(168,85,247,0.25)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'rgba(168,85,247,0.15)'}>
+          🎓 Explain This Error
+        </button>
+
+        {/* Deep Dive (subtle text link) — opens Figi Code */}
         {mapping && (
           <a
             href={lessonUrl(mapping.lessonId, mapping.chapterId)}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[11px] px-3 py-1 rounded transition-colors"
-            style={{ background: 'rgba(59,130,246,0.15)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)', textDecoration: 'none' }}
-            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(59,130,246,0.25)'}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'rgba(59,130,246,0.15)'}>
-            📚 Learn About It
+            className="text-[11px] px-2 py-1 transition-colors"
+            style={{ color: 'var(--text-muted)', textDecoration: 'none' }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = '#3b82f6'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)'}>
+            📖 Deep Dive on Figi Code →
           </a>
         )}
       </div>

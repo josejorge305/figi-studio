@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { getLessonsForFile, getLessonsForProject, getFigiUSuggestions, lessonUrl, FIGI_CODE_BASE_URL } from '../../data/curriculumMap';
 import type { LessonSuggestion } from '../../data/curriculumMap';
+import { api } from '../../utils/api';
 
 interface FileData {
   id: number;
@@ -16,7 +17,19 @@ interface LearnPanelProps {
   selectedFile: string | null;
 }
 
+interface ProgressData {
+  connected: boolean;
+  message?: string;
+  progress?: {
+    chapters?: Record<string, { completed: boolean; percent?: number }>;
+    totalXp?: number;
+    level?: number;
+  };
+}
+
 export default function LearnPanel({ files, fileContents, selectedFile }: LearnPanelProps) {
+  const [progressData, setProgressData] = useState<ProgressData | null>(null);
+
   const lessons = useMemo<LessonSuggestion[]>(() => {
     if (selectedFile) return getLessonsForFile(selectedFile);
     return getLessonsForProject(files);
@@ -26,6 +39,26 @@ export default function LearnPanel({ files, fileContents, selectedFile }: LearnP
     const enrichedFiles = files.map(f => ({ path: f.path, content: fileContents[f.path] || f.content || '' }));
     return getFigiUSuggestions(enrichedFiles);
   }, [files, fileContents]);
+
+  // Fetch Figi Code progress (graceful when not connected)
+  useEffect(() => {
+    api.get<ProgressData>('/api/user/figi-code-progress').then(res => {
+      if (res.success && res.data) {
+        setProgressData(res.data);
+      }
+    }).catch(() => {
+      // Silently fail — progress sync not available
+    });
+  }, []);
+
+  const getChapterStatus = (chapterId: string): 'completed' | 'in_progress' | 'not_started' | null => {
+    if (!progressData?.connected || !progressData.progress?.chapters) return null;
+    const ch = progressData.progress.chapters[chapterId];
+    if (!ch) return 'not_started';
+    if (ch.completed) return 'completed';
+    if (ch.percent && ch.percent > 0) return 'in_progress';
+    return 'not_started';
+  };
 
   if (files.length === 0) {
     return (
@@ -47,37 +80,47 @@ export default function LearnPanel({ files, fileContents, selectedFile }: LearnP
       </div>
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {lessons.length > 0 ? (
-          lessons.map(lesson => (
-            <div key={lesson.lessonId}
-              className="rounded-lg p-3 transition-colors"
-              style={{
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border-color)',
-                borderLeft: `4px solid ${lesson.chapterColor}`,
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-tertiary)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-secondary)'}>
-              <div className="flex items-center gap-1.5 mb-1">
-                <span className="text-[11px]">{lesson.chapterIcon}</span>
-                <span className="text-[10px] font-medium" style={{ color: lesson.chapterColor }}>
-                  {lesson.chapterId.toUpperCase().replace('-', '')} · {lesson.chapterTitle}
-                </span>
+          lessons.map(lesson => {
+            const status = getChapterStatus(lesson.chapterId);
+            return (
+              <div key={lesson.lessonId}
+                className="rounded-lg p-3 transition-colors"
+                style={{
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border-color)',
+                  borderLeft: `4px solid ${lesson.chapterColor}`,
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-tertiary)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-secondary)'}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-[11px]">{lesson.chapterIcon}</span>
+                  <span className="text-[10px] font-medium" style={{ color: lesson.chapterColor }}>
+                    {lesson.chapterId.toUpperCase().replace('-', '')} · {lesson.chapterTitle}
+                  </span>
+                  {/* Progress status badge */}
+                  {status === 'completed' && (
+                    <span className="text-[9px] px-1.5 rounded" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>✓ Completed</span>
+                  )}
+                  {status === 'in_progress' && (
+                    <span className="text-[9px] px-1.5 rounded" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316' }}>In Progress</span>
+                  )}
+                </div>
+                <p className="text-[12px] font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>
+                  {lesson.lessonTitle}
+                </p>
+                <p className="text-[11px] mb-2" style={{ color: 'var(--text-secondary)' }}>
+                  {status === 'completed' ? 'You learned this! Your project uses these concepts.' : lesson.relevance}
+                </p>
+                <a href={lessonUrl(lesson.lessonId, lesson.chapterId)} target="_blank" rel="noopener noreferrer"
+                  className="text-[11px] transition-colors"
+                  style={{ color: 'var(--text-muted)' }}
+                  onMouseEnter={e => e.currentTarget.style.color = 'var(--accent-orange)'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>
+                  {status === 'completed' ? 'Review in Figi Code →' : 'Open in Figi Code →'}
+                </a>
               </div>
-              <p className="text-[12px] font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>
-                {lesson.lessonTitle}
-              </p>
-              <p className="text-[11px] mb-2" style={{ color: 'var(--text-secondary)' }}>
-                {lesson.relevance}
-              </p>
-              <a href={lessonUrl(lesson.lessonId, lesson.chapterId)} target="_blank" rel="noopener noreferrer"
-                className="text-[11px] transition-colors"
-                style={{ color: 'var(--text-muted)' }}
-                onMouseEnter={e => e.currentTarget.style.color = 'var(--accent-orange)'}
-                onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>
-                Open in Figi Code →
-              </a>
-            </div>
-          ))
+            );
+          })
         ) : (
           <p className="text-center py-4" style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
             No specific lessons for this file type yet.

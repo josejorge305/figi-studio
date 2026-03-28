@@ -31,6 +31,10 @@ interface BottomPanelProps {
   onFileUpdated: (path: string, content: string) => void;
   terminalLines: TerminalLine[];
   terminalClear: () => void;
+  onExplainCode?: (code: string, filePath: string) => void;
+  onAskFigiAboutFile?: (path: string) => void;
+  onAskFigiAboutArchitecture?: () => void;
+  onAskFigiAboutError?: (error: string) => void;
 }
 
 const TABS: { key: BottomTab; icon: string; label: string }[] = [
@@ -45,6 +49,7 @@ export default function BottomPanel({
   openFiles, selectedFile, files, fileContents, projectId,
   onFileSelect, onFileClose, onFileUpdated,
   terminalLines, terminalClear,
+  onExplainCode, onAskFigiAboutFile, onAskFigiAboutArchitecture, onAskFigiAboutError,
 }: BottomPanelProps) {
   const tabBarHeight = 36;
 
@@ -56,6 +61,9 @@ export default function BottomPanel({
       onTabChange(tab);
     }
   };
+
+  // Get last error from terminal for "Ask Figi about this error" button
+  const lastError = terminalLines.slice().reverse().find(l => l.type === 'error')?.message;
 
   return (
     <div className="shrink-0 flex flex-col" style={{ height: collapsed ? tabBarHeight : height, borderTop: '1px solid var(--border-color)' }}>
@@ -86,6 +94,39 @@ export default function BottomPanel({
             <span>{tab.label}</span>
           </button>
         ))}
+
+        {/* Ask Figi buttons */}
+        <div className="flex-1" />
+        {!collapsed && activeTab === 'editor' && selectedFile && onAskFigiAboutFile && (
+          <button
+            onClick={() => onAskFigiAboutFile(selectedFile)}
+            className="flex items-center gap-1 px-2 py-1 mr-2 rounded text-[10px] transition-colors"
+            style={{ color: '#a855f7', background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.15)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(168,85,247,0.15)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(168,85,247,0.08)'}>
+            🎓 Ask Figi
+          </button>
+        )}
+        {!collapsed && activeTab === 'anatomy' && onAskFigiAboutArchitecture && (
+          <button
+            onClick={onAskFigiAboutArchitecture}
+            className="flex items-center gap-1 px-2 py-1 mr-2 rounded text-[10px] transition-colors"
+            style={{ color: '#a855f7', background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.15)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(168,85,247,0.15)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(168,85,247,0.08)'}>
+            🎓 Ask Figi
+          </button>
+        )}
+        {!collapsed && activeTab === 'terminal' && lastError && onAskFigiAboutError && (
+          <button
+            onClick={() => onAskFigiAboutError(lastError)}
+            className="flex items-center gap-1 px-2 py-1 mr-2 rounded text-[10px] transition-colors"
+            style={{ color: '#a855f7', background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.15)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(168,85,247,0.15)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(168,85,247,0.08)'}>
+            🎓 Ask Figi
+          </button>
+        )}
       </div>
 
       {/* Panel content */}
@@ -101,6 +142,7 @@ export default function BottomPanel({
               onFileSelect={onFileSelect}
               onFileClose={onFileClose}
               onFileUpdated={onFileUpdated}
+              onExplainCode={onExplainCode}
             />
           )}
           {activeTab === 'anatomy' && (
