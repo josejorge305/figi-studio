@@ -68,6 +68,8 @@ interface StudioLayoutProps {
   deployedUrl: string | null;
   deploying: boolean;
   cfConnected: boolean;
+  learnModeEnabled: boolean;
+  onLearnModeToggle: (enabled: boolean) => void;
   chatMode: ChatMode;
   onModeChange: (mode: ChatMode) => void;
   guidedState: GuidedState | null;
@@ -97,7 +99,7 @@ export default function StudioLayout({
   project, messages, files, fileContents, input, generating,
   previewHtml, previewKey, recentlyChanged, userName, projectId,
   terminalLines, terminalLog, terminalClear,
-  deployedUrl, deploying, cfConnected,
+  deployedUrl, deploying, cfConnected, learnModeEnabled, onLearnModeToggle,
   chatMode, onModeChange,
   guidedState, onGuidedSendPrompt, onGuidedNextStep,
   onInputChange, onSend, onSuggestionClick, onRefreshPreview, onOpenLive, onBack, onLogout,
@@ -198,6 +200,8 @@ export default function StudioLayout({
         deployedUrl={deployedUrl}
         deploying={deploying}
         cfConnected={cfConnected}
+        learnModeEnabled={learnModeEnabled}
+        onLearnModeToggle={onLearnModeToggle}
         onBack={onBack}
         onOpenLive={onOpenLive}
         onLogout={onLogout}
