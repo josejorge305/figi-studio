@@ -271,12 +271,16 @@ export const generateRoutes = {
         return new Response(JSON.stringify({ success: false, error: `Daily limit reached (${DAILY_GENERATION_LIMIT}/day).` }), { status: 429, headers: { 'Content-Type': 'application/json' } });
       }
 
-      const body = await req.json() as { message: string; mode?: 'auto' | 'build' | 'learn' | 'debug'; context?: ChatContext };
-      const { message, mode = 'auto', context = {} } = body;
+      const body = await req.json() as { message: string; mode?: 'auto' | 'build' | 'learn' | 'debug'; context?: ChatContext; learnModeEnabled?: boolean };
+      const { message, mode = 'auto', context = {}, learnModeEnabled = false } = body;
       if (!message?.trim()) return new Response(JSON.stringify({ success: false, error: 'Message required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
 
       // Detect mode
-      const resolvedMode: ChatMode = mode === 'auto' ? detectChatMode(message, context) : mode as ChatMode;
+      let resolvedMode: ChatMode = mode === 'auto' ? detectChatMode(message, context) : mode as ChatMode;
+      // If Learn Mode is ON globally, inject teaching context into build mode
+      const effectiveMessage = (learnModeEnabled && resolvedMode === 'build')
+        ? `${message}\n\n[LEARN MODE ON: After building, give a thorough teaching explanation — what each file does, what concept it teaches, which Figi Code chapter it connects to, and a specific next-step suggestion. Make this a learning moment, not just code generation.]`
+        : message.trim();
 
       const { results: history } = await env.DB.prepare(
         'SELECT role, content FROM messages WHERE project_id = ? ORDER BY created_at ASC LIMIT 20'
@@ -315,7 +319,7 @@ export const generateRoutes = {
         ...history.map(h => ({ role: h.role as 'user' | 'assistant', content: h.content })),
         {
           role: 'user' as const,
-          content: `Project: "${project.name}" — ${project.description || 'No description'}\n\nUser request: ${message.trim()}`
+          content: `Project: "${project.name}" — ${project.description || 'No description'}\n\nUser request: ${effectiveMessage}`
         }
       ];
 
