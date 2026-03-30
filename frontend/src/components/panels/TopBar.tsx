@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react';
+
 interface TopBarProps {
   projectName: string;
   projectStatus: string;
@@ -6,16 +8,18 @@ interface TopBarProps {
   deployedUrl: string | null;
   deploying: boolean;
   cfConnected: boolean;
+  learnModeEnabled: boolean;
   onBack: () => void;
   onOpenLive: () => void;
   onLogout: () => void;
   onDeploy: () => void;
+  onLearnModeToggle: (enabled: boolean) => void;
 }
 
 export default function TopBar({
   projectName, projectStatus, userName, previewHtml,
-  deployedUrl, deploying, cfConnected,
-  onBack, onOpenLive, onLogout, onDeploy,
+  deployedUrl, deploying, cfConnected, learnModeEnabled,
+  onBack, onOpenLive, onLogout, onDeploy, onLearnModeToggle,
 }: TopBarProps) {
   const handleOpenLive = () => {
     if (deployedUrl) {
@@ -43,6 +47,25 @@ export default function TopBar({
         </span>
       </div>
       <div className="flex items-center gap-3">
+
+        {/* Learn Mode Toggle */}
+        <button
+          onClick={() => onLearnModeToggle(!learnModeEnabled)}
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition-all"
+          style={{
+            background: learnModeEnabled ? 'rgba(168,85,247,0.15)' : 'rgba(51,65,85,0.2)',
+            border: `1px solid ${learnModeEnabled ? 'rgba(168,85,247,0.4)' : 'rgba(71,85,105,0.3)'}`,
+            color: learnModeEnabled ? '#a855f7' : 'var(--text-muted)',
+          }}
+          title={learnModeEnabled ? 'Learn Mode ON — Figi explains everything it builds' : 'Learn Mode OFF — click to enable teaching explanations'}>
+          🎓 <span>Learn Mode</span>
+          <span className="ml-1 w-7 h-4 rounded-full relative inline-block transition-colors"
+            style={{ background: learnModeEnabled ? 'rgba(168,85,247,0.6)' : 'rgba(71,85,105,0.4)' }}>
+            <span className="absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all shadow-sm"
+              style={{ left: learnModeEnabled ? '14px' : '2px' }} />
+          </span>
+        </button>
+
         <button
           onClick={onDeploy}
           disabled={deploying}
