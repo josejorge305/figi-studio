@@ -70,6 +70,8 @@ export default function StudioPage() {
   // Chat mode state
   const [chatMode, setChatMode] = useState<ChatMode>('build');
   const [forcedMode, setForcedMode] = useState<ChatMode | null>(null);
+  // Learn mode toggle — when ON, build mode auto-explains everything
+  const [learnModeEnabled, setLearnModeEnabled] = useState(false);
 
   // Guided path state
   const [guidedState, setGuidedState] = useState<GuidedState | null>(null);
@@ -239,7 +241,7 @@ export default function StudioPage() {
       const response = await fetch(`${API_BASE}/api/projects/${projectId}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ message: userMsg, mode: resolvedMode, context: contextObj }),
+        body: JSON.stringify({ message: userMsg, mode: resolvedMode, context: contextObj, learnModeEnabled }),
       });
 
       if (!response.ok) {
@@ -475,6 +477,8 @@ export default function StudioPage() {
         terminalLines={terminalLines} terminalLog={handleTerminalLog} terminalClear={terminalClear}
         deployedUrl={deployedUrl} deploying={deploying} cfConnected={cfConnected}
         chatMode={chatMode} onModeChange={handleModeChange}
+        learnModeEnabled={learnModeEnabled}
+        onLearnModeToggle={setLearnModeEnabled}
         guidedState={guidedState}
         onGuidedSendPrompt={handleGuidedSendPrompt}
         onGuidedNextStep={handleGuidedNextStep}
